@@ -4,28 +4,40 @@
 #include "Utils.h"
 #include "Hider.h"
 #include "GlobalData.h"
+#include "Log.h"
+#include "KuserSharedData.h"
 
 PKUSER_SHARED_DATA KernelKuserSharedData = (PKUSER_SHARED_DATA)(KUSER_SHARED_DATA_KERNELMODE);
 
-VOID ClearKuserSharedData(PEPROCESS DebuggedProcess)
+PMMPFN MmPfnDatabase = 0;
+
+BOOLEAN GetPfnDatabase() 
 {
-	KAPC_STATE State;
-	KeStackAttachProcess((PRKPROCESS)DebuggedProcess, &State);
+	ULONG64 TextSize;
+	PVOID TextBase;	
+	ULONG64 AlmostroSize;
+	PVOID AlmostroBase;
 
-	PMDL Mdl = IoAllocateMdl((PVOID)KUSER_SHARED_DATA_USERMODE, PAGE_SIZE, NULL, NULL, NULL);
-	MmProbeAndLockPages(Mdl, KernelMode, IoReadAccess);
-	PVOID Mapping = MmMapLockedPagesSpecifyCache(Mdl, KernelMode, MmNonCached, NULL, FALSE, NormalPagePriority);
-	MmProtectMdlSystemAddress(Mdl, PAGE_READWRITE);
+	if (GetSectionData("ntoskrnl.exe", ".text", TextSize, TextBase) == FALSE)
+		return FALSE;
 
-	PKUSER_SHARED_DATA Shared = (PKUSER_SHARED_DATA)(Mapping);
-	Shared->KdDebuggerEnabled = FALSE;
+	if (GetSectionData("ntoskrnl.exe", "ALMOSTRO", AlmostroSize, AlmostroBase) == FALSE)
+		return FALSE;
 
-	MmUnmapLockedPages(Mapping, Mdl);
-	MmUnlockPages(Mdl);
-	IoFreeMdl(Mdl);
-	KeUnstackDetachProcess(&State);
+	CONST CHAR* Pattern = "\x48\x8B\x05\x00\x00\x00\x00\x48\x89\x43\x18\x48\x8D\x05";
+	CONST CHAR* Mask = "xxx????xxxxxxx";
+
+	ULONG64 MmPfnDatabaseOffsetAddress = (ULONG64)FindSignature(TextBase, TextSize, Pattern, Mask);
+	if (MmPfnDatabaseOffsetAddress >= (ULONG64)TextBase && MmPfnDatabaseOffsetAddress <= (ULONG64)TextBase + TextSize)
+	{
+		MmPfnDatabase = (PMMPFN)*(ULONG64*)((MmPfnDatabaseOffsetAddress + 7) + *(LONG*)(MmPfnDatabaseOffsetAddress + 3));
+		LogInfo("MmPfnDataBase address 0x%llx", MmPfnDatabase);
+		return TRUE;
+	}
+
+	LogError("Couldn't get PfnDatabase address");
+	return FALSE;
 }
-
 VOID HookKuserSharedData(Hider::PHIDDEN_PROCESS HiddenProcess)
 {
 	KAPC_STATE State;
@@ -33,10 +45,17 @@ VOID HookKuserSharedData(Hider::PHIDDEN_PROCESS HiddenProcess)
 	PhysicalMax.QuadPart = ~0ULL;
 
 	PVOID NewKuserSharedData = MmAllocateContiguousMemory(PAGE_SIZE, PhysicalMax);
+
 	ULONG64 PfnNewKuserSharedData = MmGetPhysicalAddress(NewKuserSharedData).QuadPart >> PAGE_SHIFT;
 
 	KeStackAttachProcess((PRKPROCESS)HiddenProcess->DebuggedProcess, &State);
+
+	PMMPFN FakeKUSDMmpfn = (PMMPFN)(MmPfnDatabase + PfnNewKuserSharedData);
+
+	FakeKUSDMmpfn->u4.EntireField |= 0x200000000000000;
+
 	RtlCopyMemory(NewKuserSharedData, (PVOID)KUSER_SHARED_DATA_USERMODE, PAGE_SIZE);
+
 	HiddenProcess->Kusd.PteKuserSharedData = (PTE*)GetPteAddress(KUSER_SHARED_DATA_USERMODE);
 
 	HiddenProcess->Kusd.OriginalKuserSharedDataPfn = HiddenProcess->Kusd.PteKuserSharedData->Fields.PhysicalAddress;
@@ -52,7 +71,12 @@ VOID UnHookKuserSharedData(Hider::PHIDDEN_PROCESS HiddenProcess)
 	HiddenProcess->HideTypes[HIDE_KUSER_SHARED_DATA] = FALSE;
 
 	KeStackAttachProcess((PRKPROCESS)HiddenProcess->DebuggedProcess, &State);
+
+	PMMPFN FakeKUSDMmpfn = (PMMPFN)(MmPfnDatabase + HiddenProcess->Kusd.PteKuserSharedData->Fields.PhysicalAddress);
+	FakeKUSDMmpfn->u4.EntireField &= ~0x200000000000000;
+
 	MmFreeContiguousMemory(HiddenProcess->Kusd.KuserSharedData);
+
 	HiddenProcess->Kusd.KuserSharedData = NULL;
 	HiddenProcess->Kusd.PteKuserSharedData->Fields.PhysicalAddress = HiddenProcess->Kusd.OriginalKuserSharedDataPfn;
 	KeUnstackDetachProcess(&State);

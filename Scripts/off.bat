@@ -1,3 +1,3 @@
-sc stop airhv
 sc stop HyperHideDrv
+sc stop airhv
 pause

@@ -109,14 +109,14 @@ ULONG64 GetPteAddress(ULONG64 Address)
 {
 	if (g_HyperHide.CurrentWindowsBuildNumber <= WINDOWS_10_VERSION_THRESHOLD2)
 	{
-		return (ULONG64)(((Address >> 9) & 0x7FFFFFFFF8) - 10445360463872);
+		return (ULONG64)(((Address >> 9) & 0x7FFFFFFFF8) - 0x98000000000);
 	}
 	else 
 	{
 		if (MiGetPteAddress == NULL) 
 		{
-			CHAR* MiGetPteAddressPattern = "\x48\xC1\xE9\x00\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x23\xC8\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x03\xC1";
-			CHAR* MiGetPteAddressMask = "xxx?xx????????xxxxx????????xxx";
+			CHAR* MiGetPteAddressPattern = "\x48\xC1\xE9\x00\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x23\xC8\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x03\xC1\xC3";
+			CHAR* MiGetPteAddressMask = "xxx?xx????????xxxxx????????xxxx";
 
 			ULONG64 KernelTextSectionSize = 0;
 			PVOID KernelTextSectionBase = 0;
@@ -128,11 +128,13 @@ ULONG64 GetPteAddress(ULONG64 Address)
 			}
 
 			MiGetPteAddress = (INT64(__fastcall*)(UINT64))FindSignature(KernelTextSectionBase, KernelTextSectionSize, MiGetPteAddressPattern, MiGetPteAddressMask);
-			if (MiGetPteAddress == NULL)
+			if ((ULONG64)MiGetPteAddress <= (ULONG64)KernelTextSectionBase || (ULONG64)MiGetPteAddress >= (ULONG64)KernelTextSectionBase + KernelTextSectionSize)
 			{
 				LogError("Couldn't get MiGetPte function address");
 				return FALSE;
 			}
+
+			LogInfo("MiGetPte address: 0x%llx", MiGetPteAddress);
 		}
 
 		return MiGetPteAddress(Address);
@@ -159,6 +161,8 @@ BOOLEAN GetSectionData(CONST CHAR* ImageName,CONST CHAR* SectionName, ULONG64& S
 	{
 		STRING CurrentSectionName;
 		RtlInitString(&CurrentSectionName, (PCSZ)Section->Name);
+		if (CurrentSectionName.Length > 8)
+			CurrentSectionName.Length = 8;
 
 		if (RtlCompareString(&CurrentSectionName, &TargetSectionName, FALSE) == 0)
 		{
@@ -380,6 +384,10 @@ BOOLEAN ClearBypassProcessFreezeFlag(PEPROCESS TargetProcess)
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
 	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+
+	if (ProcInfo == NULL)
+		return FALSE; 
+
 	RtlSecureZeroMemory(ProcInfo, Bytes);
 
 	Status = ZwQuerySystemInformation(SystemProcessInformation, ProcInfo, Bytes, &Bytes);
@@ -418,6 +426,10 @@ BOOLEAN ClearThreadHideFromDebuggerFlag(PEPROCESS TargetProcess)
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
 	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+
+	if (ProcInfo == NULL)
+		return FALSE;
+	
 	RtlSecureZeroMemory(ProcInfo, Bytes);
 
 	Status = ZwQuerySystemInformation(SystemProcessInformation, ProcInfo, Bytes, &Bytes);

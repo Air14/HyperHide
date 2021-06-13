@@ -10,6 +10,7 @@
 #include "Notifiers.h"
 #include "Ssdt.h"
 #include "Ntapi.h"
+#include <intrin.h>
 
 HYPER_HIDE_GLOBAL_DATA g_HyperHide = { 0 };
 

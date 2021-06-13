@@ -270,7 +270,19 @@ namespace Hider
 	{
 		InitializeListHead(&HiddenProcessesHead);
 		KeInitializeGuardedMutex(&HiderMutex);
-		PsCreateSystemThread(&CounterThreadHandle, 0, 0, 0, 0, CounterUpdater, NULL);
+
+		if (GetPfnDatabase() == FALSE)
+		{
+			LogError("Couldn't get pfn database");
+			return FALSE;
+		}
+
+		if (NT_SUCCESS(PsCreateSystemThread(&CounterThreadHandle, 0, 0, 0, 0, CounterUpdater, NULL)) == FALSE)
+		{
+			LogError("Couldn't create system thread");
+			return FALSE;
+		}
+
 		return TRUE;
 	}
 
@@ -484,8 +496,11 @@ namespace Hider
 
 				if (HideInfo->ClearKuserSharedData == TRUE && HiddenProcess->KUserSharedDataCleared == FALSE)
 				{
-					ClearKuserSharedData(HiddenProcess->DebuggedProcess);
-					HiddenProcess->KUserSharedDataCleared = TRUE;
+					if (HiddenProcess->Kusd.KuserSharedData != NULL)
+					{
+						HiddenProcess->Kusd.KuserSharedData->KdDebuggerEnabled = 0;
+						HiddenProcess->KUserSharedDataCleared = TRUE;
+					}
 				}
 
 				if (HideInfo->ClearProcessBreakOnTerminationFlag == TRUE && HiddenProcess->ProcessBreakOnTerminationCleared == FALSE)

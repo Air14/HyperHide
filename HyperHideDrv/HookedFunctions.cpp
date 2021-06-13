@@ -765,22 +765,18 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 		{
 			PSYSTEM_HANDLE_INFORMATION_EX HandleInfoEx = (PSYSTEM_HANDLE_INFORMATION_EX)SystemInformation;
 				
-			LogDebug("Entering Filter Handle Ex Core number %d", KeGetCurrentProcessorNumber());
 			BACKUP_RETURNLENGTH();
 			FilterHandlesEx(HandleInfoEx);
 			RESTORE_RETURNLENGTH();
-			LogDebug("Leaving Filter Handle Ex Core number %d", KeGetCurrentProcessorNumber());
 		}
 
 		else if (SystemInformationClass == SystemHandleInformation)
 		{
 			PSYSTEM_HANDLE_INFORMATION HandleInfo = (PSYSTEM_HANDLE_INFORMATION)SystemInformation;
 				
-			LogDebug("Entering Filter Handle Core number %d", KeGetCurrentProcessorNumber());
 			BACKUP_RETURNLENGTH();
 			FilterHandles(HandleInfo);
 			RESTORE_RETURNLENGTH();
-			LogDebug("Leaving Filter Handle Core number %d", KeGetCurrentProcessorNumber());
 		}
 	}
 
@@ -1751,10 +1747,18 @@ BOOLEAN HookSyscalls()
 		return FALSE;
 	}
 
+	LogInfo("KiUserExceptionDispatcher address: 0x%llx", KiUserExceptionDispatcherAddress);
+
 	NtUserGetThreadState = (HANDLE(NTAPI*)(ULONG))SSDT::GetWin32KFunctionAddress("NtUserGetThreadState",Win32KSyscallNumbers.NtUserGetThreadState);
 	if (NtUserGetThreadState == NULL)
 	{
 		LogError("Couldn't get NtUserGetThreadState address");
+		return FALSE;
+	}
+
+	if (SSDT::HookNtSyscall(SyscallNumbers.NtContinue, HookedNtContinue, (PVOID*)&OriginalNtContinue) == FALSE)
+	{
+		LogError("NtContinue hook failed");
 		return FALSE;
 	}
 
@@ -1863,11 +1867,6 @@ BOOLEAN HookSyscalls()
 	if (SSDT::HookNtSyscall(SyscallNumbers.NtGetNextProcess, HookedNtGetNextProcess, (PVOID*)&OriginalNtGetNextProcess) == FALSE)
 	{
 		LogError("NtGetNextProcess hook failed");
-		return FALSE;
-	}
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtContinue, HookedNtContinue, (PVOID*)&OriginalNtContinue) == FALSE)
-	{
-		LogError("NtContinue hook failed");
 		return FALSE;
 	}
 

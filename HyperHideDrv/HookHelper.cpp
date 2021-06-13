@@ -6,6 +6,7 @@
 #include "HookHelper.h"
 #include "GlobalData.h"
 #include "HypervisorGateway.h"
+#include "Log.h"
 
 extern HYPER_HIDE_GLOBAL_DATA g_HyperHide;
 
@@ -134,6 +135,9 @@ VOID FilterHandles(PSYSTEM_HANDLE_INFORMATION HandleInfo)
 BOOLEAN IsWindowBad(HANDLE hWnd)
 {
 	PEPROCESS WindProcess = PidToProcess(OriginalNtUserQueryWindow(hWnd, WindowProcess));
+	if (WindProcess == PsGetCurrentProcessId())
+		return FALSE;
+
 	UNICODE_STRING WindowProcessName = PsQueryFullProcessImageName(WindProcess);
 
 	return Hider::IsProcessNameBad(&WindowProcessName);
@@ -150,12 +154,17 @@ BOOLEAN HookKiDispatchException(PVOID HookedKiDispatchException, PVOID* Original
 		return FALSE;
 
 	PVOID KiExceptionDispatchAddress = FindSignature(KernelTextSectionBase, KernelTextSectionSize, Pattern, Mask);
-	KiExceptionDispatchAddress = (PVOID)(*(LONG*)((ULONG64)KiExceptionDispatchAddress + 12) + (LONGLONG)((ULONG64)KiExceptionDispatchAddress + 16));
+	if ((ULONG64)KiExceptionDispatchAddress >= (ULONG64)KernelTextSectionBase && (ULONG64)KiExceptionDispatchAddress <= (ULONG64)KernelTextSectionBase + KernelTextSectionSize)
+	{
+		KiExceptionDispatchAddress = (PVOID)(*(LONG*)((ULONG64)KiExceptionDispatchAddress + 12) + (LONGLONG)((ULONG64)KiExceptionDispatchAddress + 16));
 
-	if (hv::hook_function(KiExceptionDispatchAddress, HookedKiDispatchException, OriginalKiDispatchException) == FALSE)
-		return FALSE;
+		LogInfo("KiExceptionDispatch address: 0x%llx", KiExceptionDispatchAddress);
 
-	return TRUE;
+		if ((ULONG64)KiExceptionDispatchAddress >= (ULONG64)KernelTextSectionBase && (ULONG64)KiExceptionDispatchAddress <= (ULONG64)KernelTextSectionBase + KernelTextSectionSize)
+			return hv::hook_function(KiExceptionDispatchAddress, HookedKiDispatchException, OriginalKiDispatchException);
+	}
+
+	return FALSE;
 }
 
 VOID GetNtSyscallNumbers(NT_SYSCALL_NUMBERS &SyscallNumbers)
