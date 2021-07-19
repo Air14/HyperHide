@@ -1,3 +1,4 @@
+#define _NO_CRT_STDIO_INLINE
 #include <ntifs.h>
 #include <stdarg.h>
 #include <ntstrsafe.h>

@@ -10,7 +10,8 @@
 
 enum MenuItems
 {
-    MENU_HIDER,
+    MENU_OPTIONS,
+    MENU_HYPERVISOR_VISIBLE,
 };
 
 HINSTANCE hinst;
@@ -294,7 +295,7 @@ void MenuEntry(CBTYPE cbType, void* CallbackInfo)
     PLUG_CB_MENUENTRY* Info = (PLUG_CB_MENUENTRY*)CallbackInfo;
     switch (Info->hEntry)
     {
-        case MENU_HIDER:
+        case MENU_OPTIONS:
         {
             if (g_HyperHideDrv->GetDriverHandleValue() == INVALID_HANDLE_VALUE)
             {
@@ -308,6 +309,16 @@ void MenuEntry(CBTYPE cbType, void* CallbackInfo)
             DialogBox(hinst, MAKEINTRESOURCE(DLG_MAIN), NULL, HiderDialog);
             break;
         }
+
+        case MENU_HYPERVISOR_VISIBLE:
+        {
+            static BOOLEAN HypervisorPresent = TRUE;
+            HypervisorPresent = !HypervisorPresent;
+
+            g_HyperHideDrv->SetHyperVisorVisibility(HypervisorPresent);
+            break;
+        }
+
         default:
         {
             break;
@@ -348,7 +359,9 @@ PLUG_EXPORT void plugsetup(PLUG_SETUPSTRUCT* setupStruct)
     g_Settings = new Settings();
     g_Settings->Load(g_HyperHideIniPath);
 
-    _plugin_menuaddentry(hMenu, MENU_HIDER, "&Options");
+    _plugin_menuaddentry(hMenu, MENU_OPTIONS, "&Options");
+    _plugin_menuaddentry(hMenu, MENU_HYPERVISOR_VISIBLE, "&Hypervisor not visible");
+    _plugin_menuentrysetchecked(pluginHandle, MENU_HYPERVISOR_VISIBLE, 0);
 
     HRSRC Icon = FindResourceW(hinst, MAKEINTRESOURCEW(IDB_ICON), L"PNG");
     if (Icon != NULL)

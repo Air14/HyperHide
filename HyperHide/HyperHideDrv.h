@@ -54,6 +54,7 @@ public:
 	BOOLEAN CallDriver(size_t Ioctl);
     BOOLEAN Hide(HIDE_INFO& HideInfo);
 	void SetTargetPid(UINT32 Pid);
+    void SetHyperVisorVisibility(BOOLEAN Value);
 	HANDLE GetDriverHandleValue();
 
 private:

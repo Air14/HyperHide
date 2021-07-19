@@ -6,14 +6,17 @@
 
 #define IOCTL_POOL_MANAGER_ALLOCATE CTL_CODE(FILE_DEVICE_UNKNOWN, 0x900, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
-enum __vmcall_reason
+enum vm_call_reasons
 {
 	VMCALL_TEST,
 	VMCALL_VMXOFF,
 	VMCALL_EPT_HOOK_FUNCTION,
 	VMCALL_EPT_UNHOOK_FUNCTION,
-	VMCALL_UNHOOK_ALL_PAGES,
 	VMCALL_INVEPT_CONTEXT,
+	VMCALL_DUMP_POOL_MANAGER,
+	VMCALL_DUMP_VMCS_STATE,
+	VMCALL_HIDE_HV_PRESENCE,
+	VMCALL_UNHIDE_HV_PRESENCE
 };
 
 enum invept_type
@@ -24,8 +27,6 @@ enum invept_type
 
 namespace hv
 {
-	PDEVICE_OBJECT AirHvDeviceObject = NULL;
-
 	void broadcast_vmoff(KDPC* Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2)
 	{
 		UNREFERENCED_PARAMETER(DeferredContext);
@@ -94,6 +95,18 @@ namespace hv
 	}
 
 	/// <summary>
+	/// Set/Unset presence of hypervisor
+	/// </summary>
+	/// <param name="value"> If false, hypervisor is not visible via cpuid interface, If true, it become visible</param>
+	void hypervisor_visible(bool value)
+	{
+		if (value == true)
+			__vm_call(VMCALL_UNHIDE_HV_PRESENCE, 0, 0, 0);
+		else
+			__vm_call(VMCALL_HIDE_HV_PRESENCE, 0, 0, 0);
+	}
+
+	/// <summary>
 	/// Hook function via ept and invalidate ept entries in tlb
 	/// </summary>
 	/// <param name="target_address">Address of function which we want to hook</param>
@@ -110,7 +123,6 @@ namespace hv
 
 		return status;
 	}
-
 
 	/// <summary>
 	/// Hook function via ept and invalidate ept entries in tlb
@@ -136,62 +148,50 @@ namespace hv
 		return __vm_call(VMCALL_TEST, 0, 0, 0);
 	}
 
-	BOOLEAN PerformAllocation() 
+	bool send_irp_perform_allocation()
 	{
-		NTSTATUS Status;
-		KEVENT Event;
-		PIRP Irp;
-		IO_STATUS_BLOCK ioStatus = { 0 };
+		PDEVICE_OBJECT airhv_device_object;
+		NTSTATUS status;
+		KEVENT event;
+		PIRP irp;
+		IO_STATUS_BLOCK io_status = { 0 };
+		UNICODE_STRING airhv_name;
+		PFILE_OBJECT file_object;
 
-		if (AirHvDeviceObject == NULL) 
+		RtlInitUnicodeString(&airhv_name, L"\\Device\\airhv");
+
+		status = IoGetDeviceObjectPointer(&airhv_name, 0, &file_object, &airhv_device_object);
+
+		ObReferenceObjectByPointer(airhv_device_object, FILE_ALL_ACCESS, 0, KernelMode);
+
+		// We don't need this so we instantly dereference file object
+		ObDereferenceObject(file_object);
+
+		if (NT_SUCCESS(status) == false)
 		{
-			UNICODE_STRING AirHvName;
-			PFILE_OBJECT FileObject;
-			RtlInitUnicodeString(&AirHvName, L"\\Device\\airhv");
-
-			Status = IoGetDeviceObjectPointer(&AirHvName, NULL, &FileObject, &AirHvDeviceObject);
-
-			if (NT_SUCCESS(Status) == FALSE) 
-			{
-				LogError("Couldn't get hypervisor device object pointer");
-				return FALSE;
-			}
+			LogError("Couldn't get hypervisor device object pointer");
+			return false;
 		}
 
-		KeInitializeEvent(&Event, NotificationEvent, FALSE);
-		__try
-		{
-			Irp = IoBuildDeviceIoControlRequest(IOCTL_POOL_MANAGER_ALLOCATE, AirHvDeviceObject, NULL, NULL, NULL, NULL, FALSE, &Event, &ioStatus);
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER) 
-		{
-			ASSERT(FALSE);
-			return FALSE;
-		}
+		KeInitializeEvent(&event, NotificationEvent, 0);
+		irp = IoBuildDeviceIoControlRequest(IOCTL_POOL_MANAGER_ALLOCATE, airhv_device_object, 0, 0, 0, 0, 0, &event, &io_status);
 
-
-		if (Irp == NULL)
+		if (irp == NULL)
 		{
 			LogError("Couldn't create Irp");
-			return FALSE;
+			ObDereferenceObject(airhv_device_object);
+			return false;
 		}
 
 		else
 		{
-			Status = IofCallDriver(AirHvDeviceObject, Irp);
+			status = IofCallDriver(airhv_device_object, irp);
 
-			if (Status == STATUS_PENDING)
-			{
-				KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
-				Status = ioStatus.Status;
-			}
+			if (status == STATUS_PENDING)
+				KeWaitForSingleObject(&event, Executive, KernelMode, 0, 0);
 
-			return TRUE;
+			ObDereferenceObject(airhv_device_object);
+			return true;
 		}
-	}
-
-	VOID CloseHandle() 
-	{
-		ObDereferenceObject(AirHvDeviceObject);
 	}
 }

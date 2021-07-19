@@ -6,6 +6,7 @@
 #include "KuserSharedData.h"
 #include "GlobalData.h"
 #include "Peb.h"
+#include "HypervisorGateway.h"
 
 extern HYPER_HIDE_GLOBAL_DATA g_HyperHide;
 
@@ -82,6 +83,14 @@ NTSTATUS DrvIOCTLDispatcher(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp)
 				Status = STATUS_UNSUCCESSFUL;
 			break;
 		}
+
+		case IOCTL_SET_HYPERVISOR_VISIBILITY:
+		{
+			BOOLEAN Value = *(BOOLEAN*)Irp->AssociatedIrp.SystemBuffer;
+			hv::hypervisor_visible(Value);
+			break;
+		}
+
 	}
 
 	Irp->IoStatus.Status = Status;

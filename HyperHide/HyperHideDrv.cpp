@@ -9,6 +9,7 @@ HyperHideDrv::HyperHideDrv()
 
 HyperHideDrv::~HyperHideDrv() 
 {
+    SetHyperVisorVisibility(TRUE);
 	if (this->DriverHandle != 0 && this->DriverHandle != INVALID_HANDLE_VALUE)
 		CloseHandle(this->DriverHandle);
 }
@@ -32,6 +33,19 @@ BOOLEAN HyperHideDrv::CallDriver(size_t Ioctl)
         this->DriverHandle,
         Ioctl,
         &Pid, sizeof(UINT32),
+        0, 0,
+        &BytesReturned, NULL
+    );
+}
+
+void HyperHideDrv::SetHyperVisorVisibility(BOOLEAN Value)
+{
+    DWORD BytesReturned = 0;
+    DeviceIoControl
+    (
+        this->DriverHandle,
+        IOCTL_SET_HYPERVISOR_VISIBILITY,
+        &Value, sizeof(BOOLEAN),
         0, 0,
         &BytesReturned, NULL
     );
