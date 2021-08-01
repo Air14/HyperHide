@@ -7,6 +7,7 @@
 #include "GlobalData.h"
 #include "HypervisorGateway.h"
 #include "Log.h"
+#include <intrin.h>
 
 extern HYPER_HIDE_GLOBAL_DATA g_HyperHide;
 
@@ -14,21 +15,24 @@ extern HANDLE(NTAPI* OriginalNtUserQueryWindow)(HANDLE hWnd, WINDOWINFOCLASS Win
 
 VOID FilterProcesses(PSYSTEM_PROCESS_INFO ProcessInfo)
 {
-	PSYSTEM_PROCESS_INFO PrevProcessInfo = ProcessInfo;
-	while (1)
+	//
+	// First process is always system so there won't be a case when forbidden process is first
+	//
+	PSYSTEM_PROCESS_INFO PrevProcessInfo = NULL;
+
+	while (PrevProcessInfo != ProcessInfo)
 	{
-		if (ProcessInfo->ImageName.Length != NULL && Hider::IsProcessNameBad(&ProcessInfo->ImageName) == TRUE)
+		ULONG Offset = ProcessInfo->NextEntryOffset;
+
+		if (Hider::IsProcessNameBad(&ProcessInfo->ImageName) == TRUE)
 		{
 			if (ProcessInfo->NextEntryOffset == NULL)
-			{
 				PrevProcessInfo->NextEntryOffset = NULL;
-				RtlSecureZeroMemory(ProcessInfo, sizeof(SYSTEM_PROCESS_INFO) + ProcessInfo->NumberOfThreads * sizeof(SYSTEM_THREAD_INFORMATION) - sizeof(SYSTEM_THREAD_INFORMATION));
-			}
+
 			else
-			{
 				PrevProcessInfo->NextEntryOffset += ProcessInfo->NextEntryOffset;
-				RtlSecureZeroMemory(ProcessInfo, sizeof(SYSTEM_PROCESS_INFO) + ProcessInfo->NumberOfThreads * sizeof(SYSTEM_THREAD_INFORMATION) - sizeof(SYSTEM_THREAD_INFORMATION));
-			}
+				
+			RtlSecureZeroMemory(ProcessInfo, sizeof(SYSTEM_PROCESS_INFO) + ProcessInfo->NumberOfThreads * sizeof(SYSTEM_THREAD_INFORMATION) - sizeof(SYSTEM_THREAD_INFORMATION));
 		}
 
 		else
@@ -36,106 +40,104 @@ VOID FilterProcesses(PSYSTEM_PROCESS_INFO ProcessInfo)
 			PrevProcessInfo = ProcessInfo;
 		}
 
-		if (ProcessInfo->NextEntryOffset == NULL)
-		{
-			break;
-		}
-		else
-		{
-			ProcessInfo = (PSYSTEM_PROCESS_INFO)((UCHAR*)ProcessInfo + ProcessInfo->NextEntryOffset);
-		}
+		ProcessInfo = (PSYSTEM_PROCESS_INFO)((UCHAR*)ProcessInfo + Offset);
 	}
 }
 
 VOID FilterHandlesEx(PSYSTEM_HANDLE_INFORMATION_EX HandleInfoEx)
 {
-	while (1)
-	{
-		ULONG i = 0;
-		ULONG HandlesToErase = 0;
-		ULONG FirstHandlePosition = 0;
-		BOOLEAN FristPositionFound = FALSE;
+	ULONG TotalDeletedHandles = 0;
+	BOOLEAN Found;
 
-		for (i = 0; i < HandleInfoEx->NumberOfHandles; i++)
+	do
+	{
+		ULONG FirstHandlePosition = 0;
+		Found = FALSE;
+
+		for (ULONG i = 0; i < HandleInfoEx->NumberOfHandles; i++)
 		{
 			PEPROCESS OriginalProcess = PidToProcess(HandleInfoEx->Handles[i].UniqueProcessId);
 			if (OriginalProcess != NULL)
 			{
 				UNICODE_STRING ProcessName = PsQueryFullProcessImageName(OriginalProcess);
 
-				if (FristPositionFound == FALSE && Hider::IsProcessNameBad(&ProcessName) == TRUE)
+				if (Found == FALSE && Hider::IsProcessNameBad(&ProcessName) == TRUE)
 				{
-					FristPositionFound = TRUE;
 					FirstHandlePosition = i;
+					Found = TRUE;
+				}
+
+				else if (Found == TRUE && Hider::IsProcessNameBad(&ProcessName) == FALSE)
+				{
+					RtlCopyBytes(&HandleInfoEx->Handles[FirstHandlePosition], &HandleInfoEx->Handles[i], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * (HandleInfoEx->NumberOfHandles - i));
+					HandleInfoEx->NumberOfHandles = HandleInfoEx->NumberOfHandles - (i - FirstHandlePosition);
+					TotalDeletedHandles += (i - FirstHandlePosition);
+					break;
+				}
+
+				if (i + 1 == HandleInfoEx->NumberOfHandles && Found == TRUE)
+				{
+					RtlSecureZeroMemory(&HandleInfoEx->Handles[FirstHandlePosition], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * (i - FirstHandlePosition));
+					HandleInfoEx->NumberOfHandles = HandleInfoEx->NumberOfHandles - (i - FirstHandlePosition);
+					TotalDeletedHandles += (i - FirstHandlePosition);
 				}
 			}
-
-			if ((HandleInfoEx->Handles[FirstHandlePosition].UniqueProcessId != HandleInfoEx->Handles[i].UniqueProcessId && FristPositionFound == TRUE) ||
-				(i == HandleInfoEx->NumberOfHandles - 1 && FirstHandlePosition != 0))
-			{
-				HandlesToErase = i - FirstHandlePosition;
-				break;
-			}
 		}
+	} while (Found == TRUE);
 
-		if (FristPositionFound == FALSE)
-		{
-			break;
-		}
-
-		RtlCopyBytes(&HandleInfoEx->Handles[FirstHandlePosition], &HandleInfoEx->Handles[i], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * (HandleInfoEx->NumberOfHandles - i));
-		HandleInfoEx->NumberOfHandles -= HandlesToErase;
-		RtlSecureZeroMemory(&HandleInfoEx->Handles[HandleInfoEx->NumberOfHandles], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * HandlesToErase);
-	}
+	
+	RtlSecureZeroMemory(&HandleInfoEx->Handles[HandleInfoEx->NumberOfHandles], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * TotalDeletedHandles);
 }
 
 VOID FilterHandles(PSYSTEM_HANDLE_INFORMATION HandleInfo)
 {
-	while (1)
-	{
-		ULONG i = 0;
-		ULONG HandlesToErase = 0;
-		ULONG FirstHandlePosition = 0;
-		BOOLEAN FristPositionFound = FALSE;
+	ULONG TotalDeletedHandles = 0;
+	BOOLEAN Found;
 
-		for (i = 0; i < HandleInfo->NumberOfHandles; i++)
+	do
+	{
+		ULONG FirstHandlePosition = 0;
+		Found = FALSE;
+
+		for (ULONG i = 0; i < HandleInfo->NumberOfHandles; i++)
 		{
 			PEPROCESS OriginalProcess = PidToProcess(HandleInfo->Handles[i].UniqueProcessId);
 			if (OriginalProcess != NULL)
 			{
 				UNICODE_STRING ProcessName = PsQueryFullProcessImageName(OriginalProcess);
 
-				if (FristPositionFound == FALSE && Hider::IsProcessNameBad(&ProcessName) == TRUE)
+				if (Found == FALSE && Hider::IsProcessNameBad(&ProcessName) == TRUE)
 				{
-					FristPositionFound = TRUE;
 					FirstHandlePosition = i;
+					Found = TRUE;
+				}
+
+				else if (Found == TRUE && Hider::IsProcessNameBad(&ProcessName) == FALSE)
+				{
+					RtlCopyBytes(&HandleInfo->Handles[FirstHandlePosition], &HandleInfo->Handles[i], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * (HandleInfo->NumberOfHandles - i));
+					HandleInfo->NumberOfHandles = HandleInfo->NumberOfHandles - (i - FirstHandlePosition);
+					TotalDeletedHandles += (i - FirstHandlePosition);
+					break;
+				}
+
+				if (i + 1 == HandleInfo->NumberOfHandles && Found == TRUE)
+				{
+					RtlSecureZeroMemory(&HandleInfo->Handles[FirstHandlePosition], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * (i - FirstHandlePosition));
+					HandleInfo->NumberOfHandles = HandleInfo->NumberOfHandles - (i - FirstHandlePosition);
+					TotalDeletedHandles += (i - FirstHandlePosition);
 				}
 			}
-
-			if ((HandleInfo->Handles[FirstHandlePosition].UniqueProcessId != HandleInfo->Handles[i].UniqueProcessId && FristPositionFound == TRUE) ||
-				(i == HandleInfo->NumberOfHandles - 1 && FirstHandlePosition != 0))
-			{
-				HandlesToErase = i - FirstHandlePosition;
-				break;
-			}
 		}
+	} while (Found == TRUE);
 
-		if (FristPositionFound == FALSE)
-		{
-			break;
-		}
 
-		RtlCopyBytes(&HandleInfo->Handles[FirstHandlePosition], &HandleInfo->Handles[i], sizeof(SYSTEM_HANDLE_INFORMATION) * (HandleInfo->NumberOfHandles - i));
-		HandleInfo->NumberOfHandles -= HandlesToErase;
-		RtlSecureZeroMemory(&HandleInfo->Handles[HandleInfo->NumberOfHandles], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO) * HandlesToErase);
-	}
-
+	RtlSecureZeroMemory(&HandleInfo->Handles[HandleInfo->NumberOfHandles], sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) * TotalDeletedHandles);
 }
 
 BOOLEAN IsWindowBad(HANDLE hWnd)
 {
 	PEPROCESS WindProcess = PidToProcess(OriginalNtUserQueryWindow(hWnd, WindowProcess));
-	if (WindProcess == PsGetCurrentProcessId())
+	if (WindProcess == IoGetCurrentProcess())
 		return FALSE;
 
 	UNICODE_STRING WindowProcessName = PsQueryFullProcessImageName(WindProcess);

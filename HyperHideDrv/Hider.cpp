@@ -563,8 +563,11 @@ namespace Hider
 		if (ProcessName->Buffer == NULL || ProcessName->Length == NULL)
 			return FALSE;
 
+		UNICODE_STRING CurrentProcessName = PsQueryFullProcessImageName(IoGetCurrentProcess());
+		if (RtlCompareUnicodeString(ProcessName, &CurrentProcessName, FALSE) == 0)
+			return FALSE;
+
 		UNICODE_STRING ForbiddenProcessName;
-		
 		for (ULONG64 i = 0; i < sizeof(HiddenApplicationNames) / sizeof(HiddenApplicationNames[0]); i++)
 		{
 			RtlInitUnicodeString(&ForbiddenProcessName, HiddenApplicationNames[i]);
@@ -583,7 +586,6 @@ namespace Hider
 			return FALSE;
 
 		UNICODE_STRING ForbiddenWindowName;
-
 		for (ULONG64 i = 0; i < sizeof(HiddenWindowNames) / sizeof(HiddenWindowNames[0]); i++)
 		{
 			RtlInitUnicodeString(&ForbiddenWindowName, HiddenWindowNames[i]);
