@@ -174,7 +174,7 @@ VOID UpdateDelta(PEPROCESS DebuggedProcess)
 			HiddenProcess->Kusd.DeltaTimeUpdateLock += KernelKuserSharedData->TimeUpdateLock - HiddenProcess->Kusd.BeginTimeUpdateLock;
 			HiddenProcess->Kusd.DeltaBaselineSystemQpc += KernelKuserSharedData->BaselineSystemTimeQpc - HiddenProcess->Kusd.BeginBaselineSystemQpc;
 
-			RtlZeroMemory(&HiddenProcess->Kusd.BeginInterruptTime, sizeof(ULONG64) * 6);
+			RtlZeroMemory(&HiddenProcess->Kusd.BeginInterruptTime, sizeof(ULONG64) * 5 + 4); /// oddd
 			break;
 		}
 	}

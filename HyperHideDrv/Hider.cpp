@@ -247,7 +247,7 @@ namespace Hider
 			return Status;
 		}
 
-		KeAcquireGuardedMutex(&HiderMutex); (&HiderMutex);
+		KeAcquireGuardedMutex(&HiderMutex);
 		PLIST_ENTRY Current = HiddenProcessesHead.Flink;
 		while (Current != &HiddenProcessesHead)
 		{
@@ -336,7 +336,7 @@ namespace Hider
 		HiddenProcess->DebuggedProcess = DebuggedProcess;
 		HiddenProcess->DebuggerProcess = DebuggerProcess;
 
-		KeAcquireGuardedMutex(&HiderMutex); (&HiderMutex);
+		KeAcquireGuardedMutex(&HiderMutex);
 		InsertTailList(&HiddenProcessesHead, &HiddenProcess->HiddenProcessesList);
 		InitializeListHead(&HiddenProcess->HiddenThreads.HiddenThreadList);
 		KeReleaseGuardedMutex(&HiderMutex);
@@ -352,7 +352,7 @@ namespace Hider
 			return FALSE;
 		}
 
-		KeAcquireGuardedMutex(&HiderMutex); (&HiderMutex);
+		KeAcquireGuardedMutex(&HiderMutex);
 
 		PLIST_ENTRY Current = HiddenProcessesHead.Flink;
 		while (Current != &HiddenProcessesHead)
