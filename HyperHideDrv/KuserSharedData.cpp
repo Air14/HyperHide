@@ -15,13 +15,8 @@ BOOLEAN GetPfnDatabase()
 {
 	ULONG64 TextSize;
 	PVOID TextBase;	
-	ULONG64 AlmostroSize;
-	PVOID AlmostroBase;
 
 	if (GetSectionData("ntoskrnl.exe", ".text", TextSize, TextBase) == FALSE)
-		return FALSE;
-
-	if (GetSectionData("ntoskrnl.exe", "ALMOSTRO", AlmostroSize, AlmostroBase) == FALSE)
 		return FALSE;
 
 	CONST CHAR* Pattern = "\x48\x8B\x05\x00\x00\x00\x00\x48\x89\x43\x18\x48\x8D\x05";
@@ -174,7 +169,8 @@ VOID UpdateDelta(PEPROCESS DebuggedProcess)
 			HiddenProcess->Kusd.DeltaTimeUpdateLock += KernelKuserSharedData->TimeUpdateLock - HiddenProcess->Kusd.BeginTimeUpdateLock;
 			HiddenProcess->Kusd.DeltaBaselineSystemQpc += KernelKuserSharedData->BaselineSystemTimeQpc - HiddenProcess->Kusd.BeginBaselineSystemQpc;
 
-			RtlZeroMemory(&HiddenProcess->Kusd.BeginInterruptTime, sizeof(ULONG64) * 5 + 4); /// oddd
+			RtlZeroMemory(&HiddenProcess->Kusd.BeginInterruptTime, sizeof(ULONG64) * 5 + 4);
+
 			break;
 		}
 	}

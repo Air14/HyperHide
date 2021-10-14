@@ -593,7 +593,18 @@ BOOLEAN IsSetThreadContextRestricted(PEPROCESS TargetProcess)
 
 BOOLEAN GetOffsets() 
 {	
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1)
+	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	{
+		NtapiOffsets.BypassProcessFreezeFlagOffset = 0x74;
+		NtapiOffsets.ThreadHideFromDebuggerFlagOffset = 0x560;
+		NtapiOffsets.ThreadBreakOnTerminationFlagOffset = 0x560;
+		NtapiOffsets.PicoContextOffset = 0x630;
+		NtapiOffsets.RestrictSetThreadContextOffset = 0x460;
+		NtapiOffsets.SeAuditProcessCreationInfoOffset = 0x5c0;
+	}
+
+	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H2 ||
+		g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1)
 	{
 		NtapiOffsets.BypassProcessFreezeFlagOffset = 0x74;
 		NtapiOffsets.ThreadHideFromDebuggerFlagOffset = 0x510;

@@ -1926,7 +1926,7 @@ BOOLEAN HookSyscalls()
 
 	if (HookKiDispatchException(HookedKiDispatchException, (PVOID*)&OriginalKiDispatchException) == FALSE)
 	{
-		LogError("KiExceptionDispatch hook failed");
+		LogError("KiDispatchException hook failed");
 		return FALSE;
 	}
 

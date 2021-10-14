@@ -63,6 +63,7 @@ typedef struct _HIDE_INFO
 	BOOLEAN HookNtUserQueryWindow;
 	BOOLEAN HookNtUserGetForegroundWindow;
 	BOOLEAN HookKuserSharedData;
+	BOOLEAN HookKiDispatchException;
 	BOOLEAN HookNtSetInformationProcess;
 	BOOLEAN ClearPebBeingDebugged;
 	BOOLEAN ClearPebNtGlobalFlag;

@@ -147,23 +147,23 @@ BOOLEAN IsWindowBad(HANDLE hWnd)
 
 BOOLEAN HookKiDispatchException(PVOID HookedKiDispatchException, PVOID* OriginalKiDispatchException)
 {
-	PVOID KernelTextSectionBase = 0;
-	ULONG64 KernelTextSectionSize = 0;
-	CHAR* Pattern = "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
-	CHAR* Mask = "x?x?x?xxxx?x???xxx";
+	PVOID KernelSectionBase = 0;
+	ULONG64 KernelSectionSize = 0;
+	CHAR* Pattern = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "\x24\x00\x00\x41\xB1\x01\x48\x8D\x4C\x24\x00\xE8" : "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
+	CHAR* Mask = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "x??xxxxxxx?x" : "x?x?x?xxxx?x???xxx";
+	CHAR* Section = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "PAGE" : ".text";
 
-	if (GetSectionData("ntoskrnl.exe", ".text", KernelTextSectionSize, KernelTextSectionBase) == FALSE)
+	if (GetSectionData("ntoskrnl.exe", Section, KernelSectionSize, KernelSectionBase) == FALSE)
 		return FALSE;
 
-	PVOID KiExceptionDispatchAddress = FindSignature(KernelTextSectionBase, KernelTextSectionSize, Pattern, Mask);
-	if ((ULONG64)KiExceptionDispatchAddress >= (ULONG64)KernelTextSectionBase && (ULONG64)KiExceptionDispatchAddress <= (ULONG64)KernelTextSectionBase + KernelTextSectionSize)
+	PVOID KiDispatchExceptionAddress = FindSignature(KernelSectionBase, KernelSectionSize, Pattern, Mask);
+	if ((ULONG64)KiDispatchExceptionAddress >= (ULONG64)KernelSectionBase && (ULONG64)KiDispatchExceptionAddress <= (ULONG64)KernelSectionBase + KernelSectionSize)
 	{
-		KiExceptionDispatchAddress = (PVOID)(*(LONG*)((ULONG64)KiExceptionDispatchAddress + 12) + (LONGLONG)((ULONG64)KiExceptionDispatchAddress + 16));
+		KiDispatchExceptionAddress = (PVOID)(*(LONG*)((ULONG64)KiDispatchExceptionAddress + 12) + (LONGLONG)((ULONG64)KiDispatchExceptionAddress + 16));
 
-		LogInfo("KiExceptionDispatch address: 0x%llx", KiExceptionDispatchAddress);
+		LogInfo("KiDispatchException address: 0x%llx", KiDispatchExceptionAddress);
 
-		if ((ULONG64)KiExceptionDispatchAddress >= (ULONG64)KernelTextSectionBase && (ULONG64)KiExceptionDispatchAddress <= (ULONG64)KernelTextSectionBase + KernelTextSectionSize)
-			return hv::hook_function(KiExceptionDispatchAddress, HookedKiDispatchException, OriginalKiDispatchException);
+		return hv::hook_function(KiDispatchExceptionAddress, HookedKiDispatchException, OriginalKiDispatchException);
 	}
 
 	return FALSE;
@@ -171,7 +171,34 @@ BOOLEAN HookKiDispatchException(PVOID HookedKiDispatchException, PVOID* Original
 
 VOID GetNtSyscallNumbers(NT_SYSCALL_NUMBERS &SyscallNumbers)
 {
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1)
+	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	{
+		SyscallNumbers.NtSetInformationThread = 0xd;
+		SyscallNumbers.NtQueryInformationProcess = 0x19;
+		SyscallNumbers.NtQueryObject = 0x10;
+		SyscallNumbers.NtSystemDebugControl = 0x1c8;
+		SyscallNumbers.NtSetContextThread = 0x194;
+		SyscallNumbers.NtQuerySystemInformation = 0x36;
+		SyscallNumbers.NtGetContextThread = 0xf7;
+		SyscallNumbers.NtClose = 0xf;
+		SyscallNumbers.NtQueryInformationThread = 0x25;
+		SyscallNumbers.NtCreateThreadEx = 0xC5;
+		SyscallNumbers.NtCreateFile = 0x55;
+		SyscallNumbers.NtCreateProcessEx = 0x4d;
+		SyscallNumbers.NtYieldExecution = 0x46;
+		SyscallNumbers.NtQuerySystemTime = 0x5a;
+		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
+		SyscallNumbers.NtContinue = 0xa3;
+		SyscallNumbers.NtQueryInformationJobObject = 0x150;
+		SyscallNumbers.NtCreateUserProcess = 0xcd;
+		SyscallNumbers.NtGetNextProcess = 0xfc;
+		SyscallNumbers.NtOpenProcess = 0x26;
+		SyscallNumbers.NtOpenThread = 0x134;
+		SyscallNumbers.NtSetInformationProcess = 0x1c;
+	}
+
+	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || 
+		g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H2)
 	{
 		SyscallNumbers.NtSetInformationThread = 0xd;
 		SyscallNumbers.NtQueryInformationProcess = 0x19;
@@ -486,7 +513,19 @@ VOID GetNtSyscallNumbers(NT_SYSCALL_NUMBERS &SyscallNumbers)
 
 VOID GetWin32kSyscallNumbers(WIN32K_SYSCALL_NUMBERS& SyscallNumbers)
 {
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1)
+	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	{
+		SyscallNumbers.NtUserFindWindowEx = 0x67;
+		SyscallNumbers.NtUserBuildHwndList = 0x1a;
+		SyscallNumbers.NtUserQueryWindow = 0xe;
+		SyscallNumbers.NtUserGetForegroundWindow = 0x37;
+		SyscallNumbers.NtUserGetThreadState = 0x0;
+		SyscallNumbers.NtUserInternalGetWindowText = 0x5D;
+		SyscallNumbers.NtUserGetClassName = 0x74;
+	}
+
+	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || 
+		g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H2)
 	{
 		SyscallNumbers.NtUserFindWindowEx = 0x6c;
 		SyscallNumbers.NtUserBuildHwndList = 0x1c;
