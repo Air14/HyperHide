@@ -10,6 +10,7 @@
 #include "HookHelper.h"
 #include "Ssdt.h"
 #include "HookedFunctions.h"
+#include "HypervisorGateway.h"
 
 CONST PKUSER_SHARED_DATA KuserSharedData = (PKUSER_SHARED_DATA)KUSER_SHARED_DATA_USERMODE;
 
@@ -1728,207 +1729,146 @@ VOID NTAPI HookedKiDispatchException(PEXCEPTION_RECORD ExceptionRecord, PKEXCEPT
 	}
 }
 
-BOOLEAN HookSyscalls()
+BOOLEAN HookNtSyscalls()
 {
-	NT_SYSCALL_NUMBERS SyscallNumbers;
-	WIN32K_SYSCALL_NUMBERS Win32KSyscallNumbers;
-
 	KeInitializeMutex(&NtCloseMutex, 0);
-	GetNtSyscallNumbers(SyscallNumbers);
-	GetWin32kSyscallNumbers(Win32KSyscallNumbers);
 
-	PEPROCESS CsrssProcess = GetCsrssProcess();
-	PVOID NtDllAddress = GetUserModeModule(CsrssProcess, L"ntdll.dll", FALSE);
-
-	KiUserExceptionDispatcherAddress = (ULONG64)GetExportedFunctionAddress(CsrssProcess, NtDllAddress, "KiUserExceptionDispatcher");
-	if (KiUserExceptionDispatcherAddress == NULL)
+	std::array NtSyscallsToHook
 	{
-		LogError("Couldn't get KiUserExceptionDispatcher address");
+		SyscallInfo{0, "NtSetInformationThread", HookedNtSetInformationThread, (void**)&OriginalNtSetInformationThread},
+		SyscallInfo{0, "NtQueryInformationProcess", HookedNtQueryInformationProcess, (void**)&OriginalNtQueryInformationProcess},
+		SyscallInfo{0, "NtQueryObject", HookedNtQueryObject, (void**)&OriginalNtQueryObject},
+		SyscallInfo{0, "NtSystemDebugControl", HookedNtSystemDebugControl, (void**)&OriginalNtSystemDebugControl},
+		SyscallInfo{0, "NtSetContextThread", HookedNtSetContextThread, (void**)&OriginalNtSetContextThread},
+		SyscallInfo{0, "NtQuerySystemInformation", HookedNtQuerySystemInformation, (void**)&OriginalNtQuerySystemInformation},
+		SyscallInfo{0, "NtGetContextThread", HookedNtGetContextThread, (void**)&OriginalNtGetContextThread},
+		SyscallInfo{0, "NtClose", HookedNtClose, (void**)&OriginalNtClose},
+		SyscallInfo{0, "NtQueryInformationThread", HookedNtQueryInformationThread, (void**)&OriginalNtQueryInformationThread},
+		SyscallInfo{0, "NtCreateThreadEx", HookedNtCreateThreadEx, (void**)&OriginalNtCreateThreadEx},
+		SyscallInfo{0, "NtCreateFile", HookedNtCreateFile, (void**)&OriginalNtCreateFile},
+		SyscallInfo{0, "NtCreateProcessEx", HookedNtCreateProcessEx, (void**)&OriginalNtCreateProcessEx},
+		SyscallInfo{0, "NtYieldExecution", HookedNtYieldExecution, (void**)&OriginalNtYieldExecution},
+		SyscallInfo{0, "NtQuerySystemTime", HookedNtQuerySystemTime, (void**)&OriginalNtQuerySystemTime},
+		SyscallInfo{0, "NtQueryPerformanceCounter", HookedNtQueryPerformanceCounter, (void**)&OriginalNtQueryPerformanceCounter},
+		SyscallInfo{0, "NtContinueEx", HookedNtContinue, (void**)&OriginalNtContinue},
+		SyscallInfo{0, "NtQueryInformationJobObject", HookedNtQueryInformationJobObject, (void**)&OriginalNtQueryInformationJobObject},
+		SyscallInfo{0, "NtCreateUserProcess", HookedNtCreateUserProcess, (void**)&OriginalNtCreateUserProcess},
+		SyscallInfo{0, "NtGetNextProcess", HookedNtGetNextProcess,(void**)&OriginalNtGetNextProcess},
+		SyscallInfo{0, "NtOpenProcess", HookedNtOpenProcess, (void**)&OriginalNtOpenProcess},
+		SyscallInfo{0, "NtOpenThread", HookedNtOpenThread, (void**)&OriginalNtOpenThread},
+		SyscallInfo{0, "NtSetInformationProcess", HookedNtSetInformationProcess, (void**)&OriginalNtSetInformationProcess}
+	};
+	if (g_HyperHide.CurrentWindowsBuildNumber < WINDOWS_10_VERSION_20H1) NtSyscallsToHook[15].SyscallName = "NtContinue";
+
+	if (!GetNtSyscallNumbers(NtSyscallsToHook))
+	{
+		LogError("Couldn't find all nt syscalls");
 		return FALSE;
 	}
 
-	LogInfo("KiUserExceptionDispatcher address: 0x%llx", KiUserExceptionDispatcherAddress);
+	for (auto& syscallToHook : NtSyscallsToHook)
+	{
+		if (!SSDT::HookNtSyscall(syscallToHook.SyscallNumber, syscallToHook.HookFunctionAddress, syscallToHook.OriginalFunctionAddress))
+		{
+			LogError("%s hook failed", syscallToHook.SyscallName.data());
+			return FALSE;
+		}
+	}
 
-	NtUserGetThreadState = (HANDLE(NTAPI*)(ULONG))SSDT::GetWin32KFunctionAddress("NtUserGetThreadState",Win32KSyscallNumbers.NtUserGetThreadState);
-	if (NtUserGetThreadState == NULL)
+	return TRUE;
+}
+
+BOOLEAN HookWin32kSyscalls()
+{
+	std::array Win32kSyscallsToHook
+	{
+		SyscallInfo{0UL, "NtUserBuildHwndList", HookedNtUserBuildHwndList, (void**)&OriginalNtUserBuildHwndList},
+		SyscallInfo{0UL, "NtUserFindWindowEx", HookedNtUserFindWindowEx, (void**)&OriginalNtUserFindWindowEx},
+		SyscallInfo{0UL, "NtUserQueryWindow", HookedNtUserQueryWindow, (void**)&OriginalNtUserQueryWindow},
+		SyscallInfo{0UL, "NtUserGetForegroundWindow", HookedNtUserGetForegroundWindow, (void**)&OriginalNtUserGetForegroundWindow},
+		SyscallInfo{0UL, "NtUserGetThreadState", nullptr, nullptr},
+	};
+	if (g_HyperHide.CurrentWindowsBuildNumber <= WINDOWS_7_SP1)
+	{
+		Win32kSyscallsToHook[0].HookFunctionAddress = HookedNtUserBuildHwndListSeven;
+		Win32kSyscallsToHook[0].OriginalFunctionAddress = (void**)&OriginalNtUserBuildHwndListSeven;
+	}
+
+	if (!GetWin32kSyscallNumbers(Win32kSyscallsToHook))
+	{
+		LogError("Couldn't find all win32k syscalls");
+		return FALSE;
+	}
+
+	NtUserGetThreadState = (decltype(NtUserGetThreadState))SSDT::GetWin32KFunctionAddress("NtUserGetThreadState", Win32kSyscallsToHook[4].SyscallNumber);
+	if (!NtUserGetThreadState)
 	{
 		LogError("Couldn't get NtUserGetThreadState address");
 		return FALSE;
 	}
 
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtContinue, HookedNtContinue, (PVOID*)&OriginalNtContinue) == FALSE)
+	for (auto& syscallToHook : Win32kSyscallsToHook)
 	{
-		LogError("NtContinue hook failed");
-		return FALSE;
-	}
+		if (!syscallToHook.HookFunctionAddress)
+			continue;
 
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtSetInformationThread, HookedNtSetInformationThread, (PVOID*)&OriginalNtSetInformationThread) == FALSE)
-	{
-		LogError("NtSetInformationThread hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQueryInformationProcess, HookedNtQueryInformationProcess, (PVOID*)&OriginalNtQueryInformationProcess) == FALSE)
-	{
-		LogError("NtQueryInformationProcess hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQueryObject, HookedNtQueryObject, (PVOID*)&OriginalNtQueryObject) == FALSE)
-	{
-		LogError("NtQueryObject hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtSystemDebugControl, HookedNtSystemDebugControl, (PVOID*)&OriginalNtSystemDebugControl) == FALSE)
-	{
-		LogError("NtSystemDebugControl hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtClose, HookedNtClose, (PVOID*)&OriginalNtClose) == FALSE)
-	{
-		LogError("NtClose hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtSetContextThread, HookedNtSetContextThread, (PVOID*)&OriginalNtSetContextThread) == FALSE)
-	{
-		LogError("NtSetContextThread hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQuerySystemInformation, HookedNtQuerySystemInformation, (PVOID*)&OriginalNtQuerySystemInformation) == FALSE)
-	{
-		LogError("NtQuerySystemInformation hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtGetContextThread, HookedNtGetContextThread, (PVOID*)&OriginalNtGetContextThread) == FALSE)
-	{
-		LogError("NtGetContextThread hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQueryInformationThread, HookedNtQueryInformationThread, (PVOID*)&OriginalNtQueryInformationThread) == FALSE)
-	{
-		LogError("NtQueryInformationThread hook failed"); 
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtCreateThreadEx, HookedNtCreateThreadEx, (PVOID*)&OriginalNtCreateThreadEx) == FALSE)
-	{
-		LogError("NtCreateThreadEx hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtCreateFile, HookedNtCreateFile, (PVOID*)&OriginalNtCreateFile) == FALSE)
-	{
-		LogError("NtCreateFile hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtCreateUserProcess, HookedNtCreateUserProcess, (PVOID*)&OriginalNtCreateUserProcess) == FALSE)
-	{
-		LogError("NtCreateUserProcess hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtCreateProcessEx, HookedNtCreateProcessEx, (PVOID*)&OriginalNtCreateProcessEx) == FALSE)
-	{
-		LogError("NtCreateProcessEx hook failed");
-		return FALSE;
-	}
-	
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtYieldExecution, HookedNtYieldExecution, (PVOID*)&OriginalNtYieldExecution) == FALSE)
-	{
-		LogError("NtYieldExecution hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQuerySystemTime, HookedNtQuerySystemTime, (PVOID*)&OriginalNtQuerySystemTime) == FALSE)
-	{
-		LogError("NtQuerySystemTime hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQueryPerformanceCounter, HookedNtQueryPerformanceCounter, (PVOID*)&OriginalNtQueryPerformanceCounter) == FALSE)
-	{
-		LogError("NtQueryPerformanceCounter hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtQueryInformationJobObject, HookedNtQueryInformationJobObject, (PVOID*)&OriginalNtQueryInformationJobObject) == FALSE)
-	{
-		LogError("NtQueryInformationJobObject hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtGetNextProcess, HookedNtGetNextProcess, (PVOID*)&OriginalNtGetNextProcess) == FALSE)
-	{
-		LogError("NtGetNextProcess hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtOpenProcess, HookedNtOpenProcess, (PVOID*)&OriginalNtOpenProcess) == FALSE)
-	{
-		LogError("NtOpenProcess hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtOpenThread, HookedNtOpenThread, (PVOID*)&OriginalNtOpenThread) == FALSE)
-	{
-		LogError("NtOpenThread hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookNtSyscall(SyscallNumbers.NtSetInformationProcess, HookedNtSetInformationProcess, (PVOID*)&OriginalNtSetInformationProcess) == FALSE) 
-	{
-		LogError("NtSetInformationProcess hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookWin32kSyscall("NtUserFindWindowEx", Win32KSyscallNumbers.NtUserFindWindowEx, HookedNtUserFindWindowEx, (PVOID*)&OriginalNtUserFindWindowEx) == FALSE)
-	{
-		LogError("NtUserFindWindowEx hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookWin32kSyscall("NtUserGetForegroundWindow", Win32KSyscallNumbers.NtUserGetForegroundWindow, HookedNtUserGetForegroundWindow, (PVOID*)&OriginalNtUserGetForegroundWindow) == FALSE)
-	{
-		LogError("NtUserGetForegroundWindow hook failed");
-		return FALSE;
-	}
-
-	if (SSDT::HookWin32kSyscall("NtUserQueryWindow", Win32KSyscallNumbers.NtUserQueryWindow, HookedNtUserQueryWindow, (PVOID*)&OriginalNtUserQueryWindow) == FALSE)
-	{
-		LogError("NtUserQueryWindow hook failed");
-		return FALSE;
-	}
-
-	if (g_HyperHide.CurrentWindowsBuildNumber <= WINDOWS_7_SP1)
-	{
-		if (SSDT::HookWin32kSyscall("NtUserBuildHwndList", Win32KSyscallNumbers.NtUserBuildHwndList, HookedNtUserBuildHwndListSeven, (PVOID*)&OriginalNtUserBuildHwndListSeven) == FALSE)
+		if (!SSDT::HookWin32kSyscall((char*)syscallToHook.SyscallName.data(), syscallToHook.SyscallNumber, syscallToHook.HookFunctionAddress, syscallToHook.OriginalFunctionAddress))
 		{
-			LogError("NtUserBuildHwndListSeven hook failed");
+			LogError("%s hook failed", syscallToHook.SyscallName.data());
 			return FALSE;
 		}
 	}
 
-	else
-	{
-		if (SSDT::HookWin32kSyscall("NtUserBuildHwndList", Win32KSyscallNumbers.NtUserBuildHwndList, HookedNtUserBuildHwndList, (PVOID*)&OriginalNtUserBuildHwndList) == FALSE)
-		{
-			LogError("NtUserBuildHwndList hook failed");
-			return FALSE;
-		}
-	}
+	return TRUE;
+}
 
-	if (HookKiDispatchException(HookedKiDispatchException, (PVOID*)&OriginalKiDispatchException) == FALSE)
+BOOLEAN GetKiUserExceptionDispatcherAddress()
+{
+	KiUserExceptionDispatcherAddress = reinterpret_cast<ULONG64>(GetExportedFunctionAddress(GetCsrssProcess(),
+		GetUserModeModule(GetCsrssProcess(), L"ntdll.dll", FALSE), "KiUserExceptionDispatcher"));
+
+	if (!KiUserExceptionDispatcherAddress)
+	{
+		LogError("Couldn't get KiUserExceptionDispatcher address");
+		return FALSE;
+	}
+	LogInfo("KiUserExceptionDispatcher address: 0x%llx", KiUserExceptionDispatcherAddress);
+
+	return TRUE;
+}
+
+BOOLEAN HookKiDispatchException()
+{
+	if (!GetKiUserExceptionDispatcherAddress())
+		return FALSE;
+
+	PVOID KernelSectionBase = 0;
+	ULONG64 KernelSectionSize = 0;
+	CHAR* Pattern = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "\x24\x00\x00\x41\xB1\x01\x48\x8D\x4C\x24\x00\xE8" : "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
+	CHAR* Mask = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "x??xxxxxxx?x" : "x?x?x?xxxx?x???xxx";
+	CHAR* Section = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "PAGE" : ".text";
+
+	if (GetSectionData("ntoskrnl.exe", Section, KernelSectionSize, KernelSectionBase) == FALSE)
 	{
 		LogError("KiDispatchException hook failed");
 		return FALSE;
 	}
 
-	return TRUE;
+	PVOID KiDispatchExceptionAddress = FindSignature(KernelSectionBase, KernelSectionSize, Pattern, Mask);
+	if ((ULONG64)KiDispatchExceptionAddress >= (ULONG64)KernelSectionBase && (ULONG64)KiDispatchExceptionAddress <= (ULONG64)KernelSectionBase + KernelSectionSize)
+	{
+		KiDispatchExceptionAddress = (PVOID)(*(LONG*)((ULONG64)KiDispatchExceptionAddress + 12) + (LONGLONG)((ULONG64)KiDispatchExceptionAddress + 16));
+
+		LogInfo("KiDispatchException address: 0x%llx", KiDispatchExceptionAddress);
+
+		return hv::hook_function(KiDispatchExceptionAddress, HookedKiDispatchException, (PVOID*)&OriginalKiDispatchException);
+	}
+
+	LogError("KiDispatchException hook failed");
+	return FALSE;
+}
+
+BOOLEAN HookSyscalls()
+{
+	return HookNtSyscalls() && HookWin32kSyscalls() && HookKiDispatchException();
 }

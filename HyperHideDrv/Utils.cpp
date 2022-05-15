@@ -281,7 +281,7 @@ PVOID GetExportedFunctionAddress(PEPROCESS TargetProcess, PVOID ModuleBase, CONS
 		STRING TargetExportedFunctionName;
 		RtlInitString(&TargetExportedFunctionName, ExportedFunctionName);
 
-		for (size_t i = 0; ExportDirectory->NumberOfFunctions; i++)
+		for (size_t i = 0; i < ExportDirectory->NumberOfFunctions; i++)
 		{
 			STRING CurrentExportedFunctionName;
 			RtlInitString(&CurrentExportedFunctionName, (PCHAR)ModuleBase + Name[i]);
@@ -593,7 +593,7 @@ BOOLEAN IsSetThreadContextRestricted(PEPROCESS TargetProcess)
 
 BOOLEAN GetOffsets() 
 {	
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	if (g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11)
 	{
 		NtapiOffsets.BypassProcessFreezeFlagOffset = 0x74;
 		NtapiOffsets.ThreadHideFromDebuggerFlagOffset = 0x560;

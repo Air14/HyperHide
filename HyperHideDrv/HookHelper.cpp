@@ -145,505 +145,154 @@ BOOLEAN IsWindowBad(HANDLE hWnd)
 	return Hider::IsProcessNameBad(&WindowProcessName);
 }
 
-BOOLEAN HookKiDispatchException(PVOID HookedKiDispatchException, PVOID* OriginalKiDispatchException)
+SHORT GetSyscallNumber(PVOID FunctionAddress)
 {
-	PVOID KernelSectionBase = 0;
-	ULONG64 KernelSectionSize = 0;
-	CHAR* Pattern = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "\x24\x00\x00\x41\xB1\x01\x48\x8D\x4C\x24\x00\xE8" : "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
-	CHAR* Mask = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "x??xxxxxxx?x" : "x?x?x?xxxx?x???xxx";
-	CHAR* Section = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "PAGE" : ".text";
-
-	if (GetSectionData("ntoskrnl.exe", Section, KernelSectionSize, KernelSectionBase) == FALSE)
-		return FALSE;
-
-	PVOID KiDispatchExceptionAddress = FindSignature(KernelSectionBase, KernelSectionSize, Pattern, Mask);
-	if ((ULONG64)KiDispatchExceptionAddress >= (ULONG64)KernelSectionBase && (ULONG64)KiDispatchExceptionAddress <= (ULONG64)KernelSectionBase + KernelSectionSize)
-	{
-		KiDispatchExceptionAddress = (PVOID)(*(LONG*)((ULONG64)KiDispatchExceptionAddress + 12) + (LONGLONG)((ULONG64)KiDispatchExceptionAddress + 16));
-
-		LogInfo("KiDispatchException address: 0x%llx", KiDispatchExceptionAddress);
-
-		return hv::hook_function(KiDispatchExceptionAddress, HookedKiDispatchException, OriginalKiDispatchException);
-	}
-
-	return FALSE;
+	return *(SHORT*)((ULONG64)FunctionAddress + 4);
 }
 
-VOID GetNtSyscallNumbers(NT_SYSCALL_NUMBERS &SyscallNumbers)
+BOOLEAN GetNtSyscallNumbers(std::array<SyscallInfo, 22>& SyscallsToFind)
 {
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	UNICODE_STRING knownDlls{};
+	RtlInitUnicodeString(&knownDlls, LR"(\KnownDlls\ntdll.dll)");
+
+	OBJECT_ATTRIBUTES objAttributes{};
+	InitializeObjectAttributes(&objAttributes, &knownDlls, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
+
+	HANDLE section{};
+	if (!NT_SUCCESS(ZwOpenSection(&section, SECTION_MAP_READ, &objAttributes)))
+		return false;
+
+	PVOID ntdllBase{};
+	size_t ntdllSize{};
+	LARGE_INTEGER sectionOffset{};
+	if (!NT_SUCCESS(ZwMapViewOfSection(section, ZwCurrentProcess(), &ntdllBase, 0, 0, &sectionOffset, &ntdllSize, ViewShare, 0, PAGE_READONLY)))
 	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1c8;
-		SyscallNumbers.NtSetContextThread = 0x194;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xf7;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xC5;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0xa3;
-		SyscallNumbers.NtQueryInformationJobObject = 0x150;
-		SyscallNumbers.NtCreateUserProcess = 0xcd;
-		SyscallNumbers.NtGetNextProcess = 0xfc;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x134;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
+		ZwClose(section);
+		return false;
 	}
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || 
-		g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H2)
+	auto status = true;
+	for (auto& syscallInfo : SyscallsToFind)
 	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1bd;
-		SyscallNumbers.NtSetContextThread = 0x18b;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xf2;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xc1;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0xa1;
-		SyscallNumbers.NtQueryInformationJobObject = 0x14a;
-		SyscallNumbers.NtCreateUserProcess = 0xc8;
-		SyscallNumbers.NtGetNextProcess = 0xf7;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x12e;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_19H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_19H1)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1b7;
-		SyscallNumbers.NtSetContextThread = 0x185;
-		SyscallNumbers.NtQuerySystemInformation = 0x36; 
-		SyscallNumbers.NtGetContextThread = 0xed;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xbd;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x144;
-		SyscallNumbers.NtCreateUserProcess = 0xc4;
-		SyscallNumbers.NtGetNextProcess = 0xf2;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x129;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
+		if (syscallInfo.SyscallName == "NtQuerySystemTime")
+		{
+			const auto functionAddress = GetExportedFunctionAddress(0, ntdllBase, "NtAccessCheckByTypeAndAuditAlarm");
+			if (!functionAddress)
+			{
+				status = false;
+				break;
+			}
+
+			syscallInfo.SyscallNumber = GetSyscallNumber(functionAddress) + 1;
+		}
+		else
+		{
+			const auto functionAddress = GetExportedFunctionAddress(0, ntdllBase, syscallInfo.SyscallName.data());
+			if (!functionAddress)
+			{
+				status = false;
+				break;
+			}
+
+			syscallInfo.SyscallNumber = GetSyscallNumber(functionAddress);
+		}
+
+		LogDebug("Syscall %s is equal: 0x%X", syscallInfo.SyscallName.data(), syscallInfo.SyscallNumber);
 	}
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE5)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1b6;
-		SyscallNumbers.NtSetContextThread = 0x184;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xec;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xbc;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x143;
-		SyscallNumbers.NtCreateUserProcess = 0xc3;
-		SyscallNumbers.NtGetNextProcess = 0xf1;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x128;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
+	ZwClose(section);
+	ZwUnmapViewOfSection(ZwCurrentProcess(), ntdllBase);
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE4)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1b5;
-		SyscallNumbers.NtSetContextThread = 0x183;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xeb;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xbb;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x142;
-		SyscallNumbers.NtCreateUserProcess = 0xc2;
-		SyscallNumbers.NtGetNextProcess = 0xf0;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x127;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
+	return status;
+}
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE3)
-	{
-		// Native
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1b3;
-		SyscallNumbers.NtSetContextThread = 0x181;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xea;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xba;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x140;
-		SyscallNumbers.NtCreateUserProcess = 0xc1;
-		SyscallNumbers.NtGetNextProcess = 0xef;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x125;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
+VOID GetWin32kSyscallNumbersPreRedstone(std::array<SyscallInfo, 5>& SyscallsToFind)
+{
+	SyscallsToFind[0].SyscallName = "NtUserBuildHwndList";
+	SyscallsToFind[1].SyscallName = "NtUserFindWindowEx";
+	SyscallsToFind[2].SyscallName = "NtUserQueryWindow";
+	SyscallsToFind[3].SyscallName = "NtUserGetForegroundWindow";
+	SyscallsToFind[4].SyscallName = "NtUserGetThreadState";
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE2)
+	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD1)
 	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1b0;
-		SyscallNumbers.NtSetContextThread = 0x17e;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xe9;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xb9;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x13d;
-		SyscallNumbers.NtCreateUserProcess = 0xc0;
-		SyscallNumbers.NtGetNextProcess = 0xee;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x123;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
-
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE1)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1aa;
-		SyscallNumbers.NtSetContextThread = 0x178;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xe6;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xb6;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x137;
-		SyscallNumbers.NtCreateUserProcess = 0xbd;
-		SyscallNumbers.NtGetNextProcess = 0xeb;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x11f;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
-
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD2)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1a4;
-		SyscallNumbers.NtSetContextThread = 0x172;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xe4;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xb4;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x134;
-		SyscallNumbers.NtCreateUserProcess = 0xbb;
-		SyscallNumbers.NtGetNextProcess = 0xe9;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x11c;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
-	}
-
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD1)
-	{
-		SyscallNumbers.NtSetInformationThread = 0xd;
-		SyscallNumbers.NtQueryInformationProcess = 0x19;
-		SyscallNumbers.NtQueryObject = 0x10;
-		SyscallNumbers.NtSystemDebugControl = 0x1a1;
-		SyscallNumbers.NtSetContextThread = 0x16f;
-		SyscallNumbers.NtQuerySystemInformation = 0x36;
-		SyscallNumbers.NtGetContextThread = 0xe3;
-		SyscallNumbers.NtClose = 0xf;
-		SyscallNumbers.NtQueryInformationThread = 0x25;
-		SyscallNumbers.NtCreateThreadEx = 0xb3;
-		SyscallNumbers.NtCreateFile = 0x55;
-		SyscallNumbers.NtCreateProcessEx = 0x4d;
-		SyscallNumbers.NtYieldExecution = 0x46;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x31;
-		SyscallNumbers.NtContinue = 0x43;
-		SyscallNumbers.NtQueryInformationJobObject = 0x131;
-		SyscallNumbers.NtCreateUserProcess = 0xba;
-		SyscallNumbers.NtGetNextProcess = 0xe8;
-		SyscallNumbers.NtOpenProcess = 0x26;
-		SyscallNumbers.NtOpenThread = 0x119;
-		SyscallNumbers.NtSetInformationProcess = 0x1c;
+		SyscallsToFind[0].SyscallNumber = 0x70;
+		SyscallsToFind[1].SyscallNumber = 0x1f;
+		SyscallsToFind[2].SyscallNumber = 0x13;
+		SyscallsToFind[3].SyscallNumber = 0x3f;
+		SyscallsToFind[4].SyscallNumber = 0x3;
 	}
 	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_8_1)
 	{
-		SyscallNumbers.NtSetInformationThread = 0xc;
-		SyscallNumbers.NtQueryInformationProcess = 0x18;
-		SyscallNumbers.NtQueryObject = 0xf;
-		SyscallNumbers.NtSystemDebugControl = 0x199;
-		SyscallNumbers.NtSetContextThread = 0x168;
-		SyscallNumbers.NtQuerySystemInformation = 0x35;
-		SyscallNumbers.NtGetContextThread = 0xe0;
-		SyscallNumbers.NtClose = 0xe;
-		SyscallNumbers.NtQueryInformationThread = 0x24;
-		SyscallNumbers.NtCreateThreadEx = 0xb0;
-		SyscallNumbers.NtCreateFile = 0x54;
-		SyscallNumbers.NtCreateProcessEx = 0x4c;
-		SyscallNumbers.NtYieldExecution = 0x45;
-		SyscallNumbers.NtQuerySystemTime = 0x59;
-		SyscallNumbers.NtQuerySystemTime = 0x5a;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x30;
-		SyscallNumbers.NtContinue = 0x42;
-		SyscallNumbers.NtQueryInformationJobObject = 0x12b;
-		SyscallNumbers.NtCreateUserProcess = 0xb7;
-		SyscallNumbers.NtGetNextProcess = 0xe4;
-		SyscallNumbers.NtOpenProcess = 0x25;
-		SyscallNumbers.NtOpenThread = 0x113;
-		SyscallNumbers.NtSetInformationProcess = 0x1b;
+		SyscallsToFind[0].SyscallNumber = 0x6f;
+		SyscallsToFind[1].SyscallNumber = 0x1e;
+		SyscallsToFind[2].SyscallNumber = 0x12;
+		SyscallsToFind[3].SyscallNumber = 0x3e;
+		SyscallsToFind[4].SyscallNumber = 0x2;
 	}
-
 	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_8)
 	{
-		SyscallNumbers.NtSetInformationThread = 0xb;
-		SyscallNumbers.NtQueryInformationProcess = 0x17;
-		SyscallNumbers.NtQueryObject = 0xe;
-		SyscallNumbers.NtSystemDebugControl = 0x194;
-		SyscallNumbers.NtSetContextThread = 0x165;
-		SyscallNumbers.NtQuerySystemInformation = 0x34;
-		SyscallNumbers.NtGetContextThread = 0xdd;
-		SyscallNumbers.NtClose = 0xd;
-		SyscallNumbers.NtQueryInformationThread = 0x23;
-		SyscallNumbers.NtCreateThreadEx = 0xaf;
-		SyscallNumbers.NtCreateFile = 0x53;
-		SyscallNumbers.NtCreateProcessEx = 0x4b;
-		SyscallNumbers.NtYieldExecution = 0x44;
-		SyscallNumbers.NtQuerySystemTime = 0x58;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x2f;
-		SyscallNumbers.NtContinue = 0x41;
-		SyscallNumbers.NtQueryInformationJobObject = 0x128;
-		SyscallNumbers.NtCreateUserProcess = 0xb5;
-		SyscallNumbers.NtGetNextProcess = 0xe1;
-		SyscallNumbers.NtOpenProcess = 0x24;
-		SyscallNumbers.NtOpenThread = 0x110;
-		SyscallNumbers.NtSetInformationProcess = 0x1a;
+		SyscallsToFind[0].SyscallNumber = 0x6e;
+		SyscallsToFind[1].SyscallNumber = 0x1d;
+		SyscallsToFind[2].SyscallNumber = 0x11;
+		SyscallsToFind[3].SyscallNumber = 0x3d;
+		SyscallsToFind[4].SyscallNumber = 0x1;
 	}
-
 	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_7_SP1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_7)
 	{
-		SyscallNumbers.NtSetInformationThread = 0xa;
-		SyscallNumbers.NtQueryInformationProcess = 0x16;
-		SyscallNumbers.NtQueryObject = 0xd;
-		SyscallNumbers.NtSystemDebugControl = 0x17c;
-		SyscallNumbers.NtSetContextThread = 0x150;
-		SyscallNumbers.NtQuerySystemInformation = 0x33;
-		SyscallNumbers.NtGetContextThread = 0xca;
-		SyscallNumbers.NtClose = 0xc;
-		SyscallNumbers.NtQueryInformationThread = 0x22;
-		SyscallNumbers.NtCreateThreadEx = 0xa5;
-		SyscallNumbers.NtCreateFile = 0x52;
-		SyscallNumbers.NtCreateProcessEx = 0x4a;
-		SyscallNumbers.NtYieldExecution = 0x43;
-		SyscallNumbers.NtQuerySystemTime = 0x57;
-		SyscallNumbers.NtQueryPerformanceCounter = 0x2e;
-		SyscallNumbers.NtContinue = 0x40;
-		SyscallNumbers.NtQueryInformationJobObject = 0x116;
-		SyscallNumbers.NtCreateUserProcess = 0xaa;
-		SyscallNumbers.NtGetNextProcess = 0xce;
-		SyscallNumbers.NtOpenProcess = 0x23;
-		SyscallNumbers.NtOpenThread = 0xfe;
-		SyscallNumbers.NtSetInformationProcess = 0x19;
+		SyscallsToFind[0].SyscallNumber = 0x6e;
+		SyscallsToFind[1].SyscallNumber = 0x1c;
+		SyscallsToFind[2].SyscallNumber = 0x10;
+		SyscallsToFind[3].SyscallNumber = 0x3c;
+		SyscallsToFind[4].SyscallNumber = 0x0;
 	}
 }
 
-VOID GetWin32kSyscallNumbers(WIN32K_SYSCALL_NUMBERS& SyscallNumbers)
+BOOLEAN GetWin32kSyscallNumbers(std::array<SyscallInfo, 5>& SyscallsToFind)
 {
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_11)
+	if (g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_10_VERSION_REDSTONE1)
 	{
-		SyscallNumbers.NtUserFindWindowEx = 0x67;
-		SyscallNumbers.NtUserBuildHwndList = 0x1a;
-		SyscallNumbers.NtUserQueryWindow = 0xe;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x37;
-		SyscallNumbers.NtUserGetThreadState = 0x0;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x5D;
-		SyscallNumbers.NtUserGetClassName = 0x74;
-	}
+		UNICODE_STRING knownDlls{};
+		RtlInitUnicodeString(&knownDlls, LR"(\KnownDlls\win32u.dll)");
 
-	if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_20H1 || 
-		g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_21H2)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6c;
-		SyscallNumbers.NtUserBuildHwndList = 0x1c;
-		SyscallNumbers.NtUserQueryWindow = 0x10;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3c;
-		SyscallNumbers.NtUserGetThreadState = 0x0;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x62;
-		SyscallNumbers.NtUserGetClassName = 0x79;
-	}
+		OBJECT_ATTRIBUTES objAttributes{};
+		InitializeObjectAttributes(&objAttributes, &knownDlls, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
 
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_19H2 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_19H1)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
+		HANDLE section{};
+		if (!NT_SUCCESS(ZwOpenSection(&section, SECTION_MAP_READ, &objAttributes)))
+			return false;
+
+		PVOID win32uBase{};
+		size_t win32uSize{};
+		LARGE_INTEGER sectionOffset{};
+		if (!NT_SUCCESS(ZwMapViewOfSection(section, ZwCurrentProcess(), &win32uBase, 0, 0, &sectionOffset, &win32uSize, ViewShare, 0, PAGE_READONLY)))
+		{
+			ZwClose(section);
+			return false;
+		}
+
+		auto status = true;
+		for (auto& syscallInfo : SyscallsToFind)
+		{
+			const auto functionAddress = GetExportedFunctionAddress(0, win32uBase, syscallInfo.SyscallName.data());
+			if (!functionAddress)
+			{
+				status = false;
+				break;
+			}
+
+			syscallInfo.SyscallNumber = GetSyscallNumber(functionAddress) - 0x1000;
+			LogDebug("Syscall %s is equal: 0x%X", syscallInfo.SyscallName, syscallInfo.SyscallNumber);
+		}
+
+		ZwClose(section);
+		ZwUnmapViewOfSection(ZwCurrentProcess(), win32uBase);
+
+		return status;
 	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE5)
+	else
 	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE4)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE3)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE2)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_REDSTONE1)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x70;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7d;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD2)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x70;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7d;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_10_VERSION_THRESHOLD1)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x70;
-		SyscallNumbers.NtUserBuildHwndList = 0x1f;
-		SyscallNumbers.NtUserQueryWindow = 0x13;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3f;
-		SyscallNumbers.NtUserGetThreadState = 0x3;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x65;
-		SyscallNumbers.NtUserGetClassName = 0x7d;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_8_1)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6f;
-		SyscallNumbers.NtUserBuildHwndList = 0x1e;
-		SyscallNumbers.NtUserQueryWindow = 0x12;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3e;
-		SyscallNumbers.NtUserGetThreadState = 0x2;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x64;
-		SyscallNumbers.NtUserGetClassName = 0x7c;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_8)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6e;
-		SyscallNumbers.NtUserBuildHwndList = 0x1d;
-		SyscallNumbers.NtUserQueryWindow = 0x11;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3d;
-		SyscallNumbers.NtUserGetThreadState = 0x1;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x63;
-		SyscallNumbers.NtUserGetClassName = 0x7b;
-	}
-	else if (g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_7_SP1 || g_HyperHide.CurrentWindowsBuildNumber == WINDOWS_7)
-	{
-		SyscallNumbers.NtUserFindWindowEx = 0x6e;
-		SyscallNumbers.NtUserBuildHwndList = 0x1c;
-		SyscallNumbers.NtUserQueryWindow = 0x10;
-		SyscallNumbers.NtUserGetForegroundWindow = 0x3c;
-		SyscallNumbers.NtUserGetThreadState = 0x0;
-		SyscallNumbers.NtUserInternalGetWindowText = 0x63;
-		SyscallNumbers.NtUserGetClassName = 0x7b;
+		GetWin32kSyscallNumbersPreRedstone(SyscallsToFind);
+		return true;
 	}
 }

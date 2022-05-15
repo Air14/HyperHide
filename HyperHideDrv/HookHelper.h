@@ -1,46 +1,19 @@
 #pragma once
 #include <ntddk.h>
+#include <array>
+#include <string>
 
-typedef struct _NT_SYSCALL_NUMBERS
+struct SyscallInfo
 {
-	SHORT NtSetInformationThread;
-	SHORT NtQueryInformationProcess;
-	SHORT NtQueryObject;
-	SHORT NtSystemDebugControl;
-	SHORT NtSetContextThread;
-	SHORT NtQuerySystemInformation;
-	SHORT NtGetContextThread;
-	SHORT NtClose;
-	SHORT NtQueryInformationThread;
-	SHORT NtCreateThreadEx;
-	SHORT NtCreateFile;
-	SHORT NtCreateProcessEx;
-	SHORT NtYieldExecution;
-	SHORT NtQuerySystemTime;
-	SHORT NtQueryPerformanceCounter;
-	SHORT NtContinue;
-	SHORT NtQueryInformationJobObject;
-	SHORT NtCreateUserProcess;
-	SHORT NtGetNextProcess;
-	SHORT NtOpenProcess;
-	SHORT NtOpenThread;
-	SHORT NtSetInformationProcess;
-}NT_SYSCALL_NUMBERS;
+	SHORT SyscallNumber;
+	std::string_view SyscallName;
+	PVOID HookFunctionAddress;
+	PVOID* OriginalFunctionAddress;
+};
 
-typedef struct _WIN32K_SYSCALL_NUMBERS
-{
-	SHORT NtUserFindWindowEx;
-	SHORT NtUserBuildHwndList;
-	SHORT NtUserQueryWindow;
-	SHORT NtUserGetForegroundWindow;
-	SHORT NtUserGetThreadState;
-	SHORT NtUserGetClassName;
-	SHORT NtUserInternalGetWindowText;
-}WIN32K_SYSCALL_NUMBERS;
+BOOLEAN GetNtSyscallNumbers(std::array<SyscallInfo, 22>& SyscallsToFind);
 
-VOID GetNtSyscallNumbers(NT_SYSCALL_NUMBERS& SyscallNumbers);
-
-VOID GetWin32kSyscallNumbers(WIN32K_SYSCALL_NUMBERS& SyscallNumbers);
+BOOLEAN GetWin32kSyscallNumbers(std::array<SyscallInfo, 5>& SyscallsToFind);
 
 BOOLEAN IsWindowBad(HANDLE hWnd);
 
@@ -49,5 +22,3 @@ VOID FilterProcesses(PSYSTEM_PROCESS_INFO ProcessInfo);
 VOID FilterHandlesEx(PSYSTEM_HANDLE_INFORMATION_EX HandleInfoEx);
 
 VOID FilterHandles(PSYSTEM_HANDLE_INFORMATION HandleInfo);
-
-BOOLEAN HookKiDispatchException(PVOID HookedKiDispatchException, PVOID* OriginalKiDispatchException);;
