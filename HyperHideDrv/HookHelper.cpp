@@ -192,7 +192,7 @@ BOOLEAN GetWin32kSyscallNumbers(std::array<SyscallInfo, 5>& SyscallsToFind)
 			}
 
 			syscallInfo.SyscallNumber = GetSyscallNumber(functionAddress) - 0x1000;
-			LogDebug("Syscall %s is equal: 0x%X", syscallInfo.SyscallName, syscallInfo.SyscallNumber);
+			LogDebug("Syscall %s is equal: 0x%X", syscallInfo.SyscallName.data(), syscallInfo.SyscallNumber);
 		}
 
 		ZwClose(section);
