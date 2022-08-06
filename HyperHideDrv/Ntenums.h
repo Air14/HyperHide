@@ -1,4 +1,19 @@
 #pragma once
+
+enum _LDR_DLL_LOAD_REASON
+{
+    LoadReasonStaticDependency = 0,
+    LoadReasonStaticForwarderDependency = 1,
+    LoadReasonDynamicForwarderDependency = 2,
+    LoadReasonDelayloadDependency = 3,
+    LoadReasonDynamicLoad = 4,
+    LoadReasonAsImageLoad = 5,
+    LoadReasonAsDataLoad = 6,
+    LoadReasonEnclavePrimary = 7,
+    LoadReasonEnclaveDependency = 8,
+    LoadReasonUnknown = -1
+};
+
 typedef enum _PSCREATETHREADNOTIFYTYPE {
     PsCreateThreadNotifyNonSystem = 0,
     PsCreateThreadNotifySubsystems = 1
@@ -6,7 +21,8 @@ typedef enum _PSCREATETHREADNOTIFYTYPE {
 
 enum SYSDBG_COMMAND
 {
-    SysDbgGetTriageDump = 29
+    SysDbgGetTriageDump = 29,
+    SysDbgGetLiveKernelDump = 37,
 };
 
 enum JOBOBJECTINFOCLASS

@@ -2,6 +2,27 @@
 #include <ntddk.h>
 #include "Ntenums.h"
 
+typedef struct _SYSTEM_POOLTAG
+{
+    union
+    {
+        UCHAR Tag[4];
+        ULONG TagUlong;
+    };
+    ULONG PagedAllocs;
+    ULONG PagedFrees;
+    SIZE_T PagedUsed;
+    ULONG NonPagedAllocs;
+    ULONG NonPagedFrees;
+    SIZE_T NonPagedUsed;
+}SYSTEM_POOLTAG, *PSYSTEM_POOLTAG;
+
+typedef struct _SYSTEM_POOLTAG_INFORMATION
+{
+    ULONG Count;
+    SYSTEM_POOLTAG TagInfo[ANYSIZE_ARRAY];
+}SYSTEM_POOLTAG_INFORMATION, *PSYSTEM_POOLTAG_INFORMATION;
+
 typedef struct _CURDIR
 {
     UNICODE_STRING DosPath;                                         //0x0
@@ -257,6 +278,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemProcessorPerformanceInformation = 8,
     SystemModuleInformation = 11,
     SystemHandleInformation = 16,
+    SystemPoolTagInformation = 22,
     SystemInterruptInformation = 23,
     SystemExceptionInformation = 33,
     SystemKernelDebuggerInformation = 35,

@@ -10,5 +10,5 @@ namespace SSDT
 
 	BOOLEAN GetSsdt();
 
-	PVOID GetWin32KFunctionAddress(PCH SyscallName, SHORT SyscallIndex);
+	PVOID GetWin32KFunctionAddress(CONST CHAR* SyscallName, SHORT SyscallIndex);
 }

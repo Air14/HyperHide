@@ -1,6 +1,7 @@
 #pragma warning( disable : 4201)
 #include <ntddk.h>
 #include <intrin.h>
+#include <span>
 #include "Ntstructs.h"
 #include "GlobalData.h"
 #include "Log.h"
@@ -777,6 +778,25 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 				
 			BACKUP_RETURNLENGTH();
 			FilterHandles(HandleInfo);
+			RESTORE_RETURNLENGTH();
+		}
+
+		else if (SystemInformationClass == SystemPoolTagInformation)
+		{
+			BACKUP_RETURNLENGTH();
+
+			const auto systemPooltagInfo = reinterpret_cast<PSYSTEM_POOLTAG_INFORMATION>(SystemInformation);
+			std::span<SYSTEM_POOLTAG> poolTags{ systemPooltagInfo->TagInfo, systemPooltagInfo->Count };
+			auto newEnd = std::remove_if(poolTags.begin(), poolTags.end(), [](SYSTEM_POOLTAG& PoolTag) 
+				{return PoolTag.TagUlong == DRIVER_TAG || PoolTag.TagUlong == 'vhra' ? true : false;});
+
+			if (newEnd != poolTags.end())
+			{
+				const auto numberOfPools = std::distance(newEnd, poolTags.end());
+				RtlSecureZeroMemory(&*newEnd, sizeof(SYSTEM_POOLTAG) * numberOfPools);
+				systemPooltagInfo->Count -= numberOfPools;
+			}
+
 			RESTORE_RETURNLENGTH();
 		}
 	}
@@ -1844,9 +1864,9 @@ BOOLEAN HookKiDispatchException()
 
 	PVOID KernelSectionBase = 0;
 	ULONG64 KernelSectionSize = 0;
-	CHAR* Pattern = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "\x24\x00\x00\x41\xB1\x01\x48\x8D\x4C\x24\x00\xE8" : "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
-	CHAR* Mask = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "x??xxxxxxx?x" : "x?x?x?xxxx?x???xxx";
-	CHAR* Section = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "PAGE" : ".text";
+	const auto Pattern = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "\x24\x00\x00\x41\xB1\x01\x48\x8D\x4C\x24\x00\xE8" : "\x8B\x00\x50\x00\x8B\x00\x58\x48\x8D\x4D\x00\xE8\x00\x00\x00\xFF\x8B\x55";
+	const auto Mask = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "x??xxxxxxx?x" : "x?x?x?xxxx?x???xxx";
+	const auto Section = g_HyperHide.CurrentWindowsBuildNumber >= WINDOWS_11 ? "PAGE" : ".text";
 
 	if (GetSectionData("ntoskrnl.exe", Section, KernelSectionSize, KernelSectionBase) == FALSE)
 	{

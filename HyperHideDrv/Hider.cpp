@@ -15,14 +15,14 @@ namespace Hider
 	BOOLEAN StopCounterThread = FALSE;
 	HANDLE CounterThreadHandle = NULL;
 
-	PWCH HiddenDeviceNames[] =
+	CONST WCHAR* HiddenDeviceNames[] =
 	{
 		L"\\??\\HyperHideDrv",
 		L"\\??\\airhv",
 		L"\\??\\ProcmonDebugLogger",
 	};
 	
-	PWCH HiddenWindowNames[] =
+	CONST WCHAR* HiddenWindowNames[] =
 	{
 		L"x64dbg",
 		L"x32dbg",
@@ -38,7 +38,7 @@ namespace Hider
 		L"Sysinternals"
 	};
 
-	PWCH HiddenApplicationNames[] =
+	CONST WCHAR* HiddenApplicationNames[] =
 	{
 		L"ollydbg.exe",
 		L"ida.exe",
@@ -88,7 +88,7 @@ namespace Hider
 		L"procmon64.exe"
 	};
 
-	PWCH HiddenWindowClassNames[] =
+	CONST WCHAR* HiddenWindowClassNames[] =
 	{
 		L"Qt5QWindowIcon" // Ida and x64dbg ClassNames
 		L"ObsidianGUI",

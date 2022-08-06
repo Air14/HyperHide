@@ -46,7 +46,7 @@ namespace SSDT
 		return TRUE;
 	}
 
-	PVOID GetWin32KFunctionAddress(PCH SyscallName, SHORT SyscallIndex)
+	PVOID GetWin32KFunctionAddress(CONST CHAR* SyscallName, SHORT SyscallIndex)
 	{
 		KAPC_STATE State;
 		PVOID AddressOfTargetFunction = 0;

@@ -6,7 +6,7 @@
 
 void LogPrint(__log_type Type, const char* fmt, ...)
 {
-	char* LogType;
+	const char* LogType;
 	LARGE_INTEGER SystemTime;
 	LARGE_INTEGER LocalTime;
 	TIME_FIELDS TimeFields;
@@ -62,7 +62,7 @@ void LogPrint(__log_type Type, const char* fmt, ...)
 	RtlStringCchVPrintfA(MessageBuffer, sizeof(MessageBuffer), fmt, Args);
 	va_end(Args);
 
-	char* OutputFormat = "%s  %s  %s\r\n";
+	const auto OutputFormat = "%s  %s  %s\r\n";
 
 	RtlStringCchPrintfA(
 		OutputBuffer,

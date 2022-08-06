@@ -29,7 +29,7 @@ PVOID FindSignature(PVOID Memory, ULONG64 Size, PCSZ Pattern, PCSZ Mask);
 
 BOOLEAN GetProcessInfo(CONST CHAR* Name, _Out_ ULONG64& ImageSize, _Out_ PVOID& ImageBase);
 
-PEPROCESS GetProcessByName(WCHAR* ProcessName);
+PEPROCESS GetProcessByName(CONST WCHAR* ProcessName);
 
 BOOLEAN RtlUnicodeStringContains(PUNICODE_STRING Str, PUNICODE_STRING SubStr, BOOLEAN CaseInsensitive);
 

@@ -115,8 +115,8 @@ ULONG64 GetPteAddress(ULONG64 Address)
 	{
 		if (MiGetPteAddress == NULL) 
 		{
-			CHAR* MiGetPteAddressPattern = "\x48\xC1\xE9\x00\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x23\xC8\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x03\xC1\xC3";
-			CHAR* MiGetPteAddressMask = "xxx?xx????????xxxxx????????xxxx";
+			const auto MiGetPteAddressPattern = "\x48\xC1\xE9\x00\x48\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x23\xC8\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00\x48\x03\xC1\xC3";
+			const auto MiGetPteAddressMask = "xxx?xx????????xxxxx????????xxxx";
 
 			ULONG64 KernelTextSectionSize = 0;
 			PVOID KernelTextSectionBase = 0;
@@ -218,7 +218,7 @@ BOOLEAN GetProcessInfo(CONST CHAR* Name, ULONG64& ImageSize, PVOID& ImageBase)
 	return FALSE;
 }
 
-PEPROCESS GetProcessByName(WCHAR* ProcessName)
+PEPROCESS GetProcessByName(CONST WCHAR* ProcessName)
 {
 	NTSTATUS Status;
 	ULONG Bytes;
