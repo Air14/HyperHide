@@ -633,7 +633,8 @@ NTSTATUS NTAPI HookedNtSystemDebugControl(
 NTSTATUS (NTAPI* OriginalNtClose)(HANDLE Handle);
 NTSTATUS NTAPI HookedNtClose(HANDLE Handle)
 {
-	if(Hider::IsHidden(IoGetCurrentProcess(),HIDE_NT_CLOSE) == TRUE)
+	const auto targetProcess = IoGetCurrentProcess();
+	if(Hider::IsHidden(targetProcess, HIDE_NT_CLOSE) == TRUE)
 	{
 		KeWaitForSingleObject(&NtCloseMutex, Executive, KernelMode, FALSE, NULL);
 		
@@ -644,6 +645,10 @@ NTSTATUS NTAPI HookedNtClose(HANDLE Handle)
 		if (Status == STATUS_INVALID_HANDLE)
 		{
 			KeReleaseMutex(&NtCloseMutex, FALSE);
+
+			if (const auto HiddenProcess = Hider::QueryHiddenProcess(targetProcess); HiddenProcess && HiddenProcess->ProcessHandleTracingEnabled)
+				return KeRaiseUserException(STATUS_INVALID_HANDLE);
+
 			return STATUS_INVALID_HANDLE;
 		}
 
@@ -652,6 +657,10 @@ NTSTATUS NTAPI HookedNtClose(HANDLE Handle)
 			if (ObjAttributeInfo.ProtectFromClose == TRUE)
 			{
 				KeReleaseMutex(&NtCloseMutex, FALSE);
+
+				if (const auto HiddenProcess = Hider::QueryHiddenProcess(targetProcess); HiddenProcess && HiddenProcess->ProcessHandleTracingEnabled)
+					return KeRaiseUserException(STATUS_HANDLE_NOT_CLOSABLE);
+
 				return STATUS_HANDLE_NOT_CLOSABLE;
 			}
 		}

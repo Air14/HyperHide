@@ -5,6 +5,8 @@
 
 extern "C"
 {
+    NTSTATUS NTAPI KeRaiseUserException(NTSTATUS Status);
+
     VOID NTAPI KeGenericCallDpc
     (
         _In_ PKDEFERRED_ROUTINE Routine,
