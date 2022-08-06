@@ -765,36 +765,70 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 
 		else if (SystemInformationClass == SystemExtendedHandleInformation)
 		{
-			PSYSTEM_HANDLE_INFORMATION_EX HandleInfoEx = (PSYSTEM_HANDLE_INFORMATION_EX)SystemInformation;
-				
+			const auto systemHandleInfoEx = reinterpret_cast<PSYSTEM_HANDLE_INFORMATION_EX>(SystemInformation);
 			BACKUP_RETURNLENGTH();
-			FilterHandlesEx(HandleInfoEx);
+
+			std::span systemHandleTableEntryInfo{ systemHandleInfoEx->Handles, systemHandleInfoEx->NumberOfHandles };
+			auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
+				{
+					const auto originalProcess = PidToProcess(HandleEntryInfo.UniqueProcessId);
+					if (!originalProcess)
+						return false;
+
+					auto processName = PsQueryFullProcessImageName(originalProcess);
+					return static_cast<bool>(Hider::IsProcessNameBad(&processName));
+				});
+
+			if (newEnd != systemHandleTableEntryInfo.end())
+			{
+				const auto numberOfHandleInfos = std::distance(newEnd, systemHandleTableEntryInfo.end());
+				RtlSecureZeroMemory(&*newEnd, sizeof(decltype(systemHandleTableEntryInfo)::element_type) * numberOfHandleInfos);
+				systemHandleInfoEx->NumberOfHandles -= numberOfHandleInfos;
+			}
+
 			RESTORE_RETURNLENGTH();
 		}
 
 		else if (SystemInformationClass == SystemHandleInformation)
 		{
-			PSYSTEM_HANDLE_INFORMATION HandleInfo = (PSYSTEM_HANDLE_INFORMATION)SystemInformation;
-				
+			const auto systemHandleInfo = reinterpret_cast<PSYSTEM_HANDLE_INFORMATION>(SystemInformation);
 			BACKUP_RETURNLENGTH();
-			FilterHandles(HandleInfo);
+
+			std::span systemHandleTableEntryInfo{ systemHandleInfo->Handles, systemHandleInfo->NumberOfHandles };
+			auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
+				{
+					const auto originalProcess = PidToProcess(HandleEntryInfo.UniqueProcessId);
+					if (!originalProcess)
+						return false;
+
+					auto processName = PsQueryFullProcessImageName(originalProcess);
+					return static_cast<bool>(Hider::IsProcessNameBad(&processName));
+				});
+
+			if (newEnd != systemHandleTableEntryInfo.end())
+			{
+				const auto numberOfHandleInfos = std::distance(newEnd, systemHandleTableEntryInfo.end());
+				RtlSecureZeroMemory(&*newEnd, sizeof(decltype(systemHandleTableEntryInfo)::element_type) * numberOfHandleInfos);
+				systemHandleInfo->NumberOfHandles -= static_cast<ULONG>(numberOfHandleInfos);
+			}
+
 			RESTORE_RETURNLENGTH();
 		}
 
 		else if (SystemInformationClass == SystemPoolTagInformation)
 		{
+			const auto systemPooltagInfo = reinterpret_cast<PSYSTEM_POOLTAG_INFORMATION>(SystemInformation);
 			BACKUP_RETURNLENGTH();
 
-			const auto systemPooltagInfo = reinterpret_cast<PSYSTEM_POOLTAG_INFORMATION>(SystemInformation);
-			std::span<SYSTEM_POOLTAG> poolTags{ systemPooltagInfo->TagInfo, systemPooltagInfo->Count };
-			auto newEnd = std::remove_if(poolTags.begin(), poolTags.end(), [](SYSTEM_POOLTAG& PoolTag) 
+			std::span poolTags{ systemPooltagInfo->TagInfo, systemPooltagInfo->Count };
+			auto newEnd = std::remove_if(poolTags.begin(), poolTags.end(), [](auto& PoolTag) 
 				{return PoolTag.TagUlong == DRIVER_TAG || PoolTag.TagUlong == 'vhra' ? true : false;});
 
 			if (newEnd != poolTags.end())
 			{
 				const auto numberOfPools = std::distance(newEnd, poolTags.end());
-				RtlSecureZeroMemory(&*newEnd, sizeof(SYSTEM_POOLTAG) * numberOfPools);
-				systemPooltagInfo->Count -= numberOfPools;
+				RtlSecureZeroMemory(&*newEnd, sizeof(decltype(poolTags)::element_type) * numberOfPools);
+				systemPooltagInfo->Count -= static_cast<ULONG>(numberOfPools);
 			}
 
 			RESTORE_RETURNLENGTH();
