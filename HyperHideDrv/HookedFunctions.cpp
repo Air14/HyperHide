@@ -620,12 +620,13 @@ NTSTATUS NTAPI HookedNtSystemDebugControl(
 	 ULONG                OutputBufferLength,
 	 PULONG              ReturnLength )
 {
-	if(Hider::IsHidden(IoGetCurrentProcess(),HIDE_NT_SYSTEM_DEBUG_CONTROL) == TRUE)
+	if (Hider::IsHidden(IoGetCurrentProcess(), HIDE_NT_SYSTEM_DEBUG_CONTROL) == TRUE &&
+		Command != SysDbgGetTriageDump && 
+		Command != SysDbgGetLiveKernelDump)
 	{
-		if(Command == SysDbgGetTriageDump)
-			return STATUS_INFO_LENGTH_MISMATCH;
 		return STATUS_DEBUGGER_INACTIVE;
 	}
+
 	return OriginalNtSystemDebugControl(Command, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength, ReturnLength);
 }
 
