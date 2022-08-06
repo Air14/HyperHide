@@ -782,7 +782,7 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 			BACKUP_RETURNLENGTH();
 
 			std::span systemHandleTableEntryInfo{ systemHandleInfoEx->Handles, systemHandleInfoEx->NumberOfHandles };
-			auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
+			const auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
 				{
 					const auto originalProcess = PidToProcess(HandleEntryInfo.UniqueProcessId);
 					if (!originalProcess)
@@ -808,7 +808,7 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 			BACKUP_RETURNLENGTH();
 
 			std::span systemHandleTableEntryInfo{ systemHandleInfo->Handles, systemHandleInfo->NumberOfHandles };
-			auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
+			const auto newEnd = std::remove_if(systemHandleTableEntryInfo.begin(), systemHandleTableEntryInfo.end(), [](auto& HandleEntryInfo)
 				{
 					const auto originalProcess = PidToProcess(HandleEntryInfo.UniqueProcessId);
 					if (!originalProcess)
@@ -834,7 +834,7 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
 			BACKUP_RETURNLENGTH();
 
 			std::span poolTags{ systemPooltagInfo->TagInfo, systemPooltagInfo->Count };
-			auto newEnd = std::remove_if(poolTags.begin(), poolTags.end(), [](auto& PoolTag) 
+			const auto newEnd = std::remove_if(poolTags.begin(), poolTags.end(), [](auto& PoolTag) 
 				{return PoolTag.TagUlong == DRIVER_TAG || PoolTag.TagUlong == 'vhra' ? true : false;});
 
 			if (newEnd != poolTags.end())
@@ -1621,40 +1621,31 @@ NTSTATUS NTAPI HookedNtContinue(PCONTEXT Context, ULONG64 TestAlert)
 }
 
 NTSTATUS(NTAPI* OriginalNtQueryInformationJobObject)(HANDLE JobHandle, JOBOBJECTINFOCLASS JobInformationClass, PVOID JobInformation, ULONG JobInformationLength, PULONG ReturnLength);
-NTSTATUS NTAPI HookedNtQueryInformationJobObject(HANDLE JobHandle, JOBOBJECTINFOCLASS JobInformationClass, PVOID JobInformation, ULONG JobInformationLength, PULONG ReturnLength) 
+NTSTATUS NTAPI HookedNtQueryInformationJobObject(HANDLE JobHandle, JOBOBJECTINFOCLASS JobInformationClass, PVOID JobInformation, ULONG JobInformationLength, PULONG ReturnLength)
 {
-	NTSTATUS Status = OriginalNtQueryInformationJobObject(JobHandle, JobInformationClass, JobInformation, JobInformationLength, ReturnLength);
+	auto status = OriginalNtQueryInformationJobObject(JobHandle, JobInformationClass, JobInformation, JobInformationLength, ReturnLength);
 	if (Hider::IsHidden(IoGetCurrentProcess(), HIDE_NT_QUERY_INFORMATION_JOB_OBJECT) == TRUE &&
 		JobInformationClass == JobObjectBasicProcessIdList &&
-		NT_SUCCESS(Status) == TRUE)
+		NT_SUCCESS(status) == TRUE)
 	{
+		const auto jobProcessIdList = reinterpret_cast<PJOBOBJECT_BASIC_PROCESS_ID_LIST>(JobInformation);
 		BACKUP_RETURNLENGTH();
 
-		PJOBOBJECT_BASIC_PROCESS_ID_LIST JobProcessIdList = (PJOBOBJECT_BASIC_PROCESS_ID_LIST)JobInformation;
-		for (size_t i = 0; i < JobProcessIdList->NumberOfAssignedProcesses; i++)
+		std::span processIdList{ jobProcessIdList->ProcessIdList, jobProcessIdList->NumberOfAssignedProcesses };
+		const auto newEnd = std::remove_if(processIdList.begin(), processIdList.end(), [](auto ProcessId) {return Hider::IsDebuggerProcess(PidToProcess(ProcessId)); });
+
+		if (newEnd != processIdList.end())
 		{
-			if (Hider::IsDebuggerProcess(PidToProcess(JobProcessIdList->ProcessIdList[i])) == TRUE) 
-			{
-				if (i == JobProcessIdList->NumberOfAssignedProcesses - 1) 
-					JobProcessIdList->ProcessIdList[i] = NULL;
-
-				else
-				{
-					for (size_t j = i + 1; j < JobProcessIdList->NumberOfAssignedProcesses; j++)
-					{
-						JobProcessIdList->ProcessIdList[j - 1] = JobProcessIdList->ProcessIdList[j];
-						JobProcessIdList->ProcessIdList[j] = 0;
-					}
-				}
-
-				JobProcessIdList->NumberOfAssignedProcesses--;
-				JobProcessIdList->NumberOfProcessIdsInList--;
-			}
+			const auto numberOfPids = std::distance(newEnd, processIdList.end());
+			RtlSecureZeroMemory(&*newEnd, sizeof(decltype(processIdList)::element_type) * numberOfPids);
+			jobProcessIdList->NumberOfAssignedProcesses -= static_cast<ULONG>(numberOfPids);
+			jobProcessIdList->NumberOfProcessIdsInList -= static_cast<ULONG>(numberOfPids);
 		}
 
 		RESTORE_RETURNLENGTH();
 	}
-	return Status;
+
+	return status;
 }
 
 // Win32k Syscalls
@@ -1678,73 +1669,49 @@ HANDLE NTAPI HookedNtUserQueryWindow(HANDLE hWnd, WINDOWINFOCLASS WindowInfo)
 NTSTATUS(NTAPI* OriginalNtUserBuildHwndList)(HANDLE hDesktop, HANDLE hwndParent, BOOLEAN bChildren, BOOLEAN bUnknownFlag, ULONG dwThreadId, ULONG lParam, PHANDLE pWnd, PULONG pBufSize);
 NTSTATUS NTAPI HookedNtUserBuildHwndList(HANDLE hDesktop, HANDLE hwndParent, BOOLEAN bChildren, BOOLEAN bUnknownFlag, ULONG dwThreadId, ULONG lParam, PHANDLE pWnd, PULONG pBufSize)
 {
-	NTSTATUS Status = OriginalNtUserBuildHwndList(hDesktop, hwndParent, bChildren, bUnknownFlag, dwThreadId, lParam, pWnd, pBufSize);
+	const auto status = OriginalNtUserBuildHwndList(hDesktop, hwndParent, bChildren, bUnknownFlag, dwThreadId, lParam, pWnd, pBufSize);
+
 	if (Hider::IsHidden(IoGetCurrentProcess(), HIDE_NT_USER_BUILD_HWND_LIST) == TRUE &&
-		NT_SUCCESS(Status) == TRUE &&
+		NT_SUCCESS(status) == TRUE &&
 		pWnd != NULL &&
 		pBufSize != NULL)
 	{
-		for (size_t i = 0; i < *pBufSize; i++)
+		std::span handles = { pWnd, *pBufSize };
+		const auto newEnd = std::remove_if(handles.begin(), handles.end(), [](auto Handle) {return Handle && IsWindowBad(Handle); });
+
+		if (newEnd != handles.end())
 		{
-			if (pWnd[i] != NULL && IsWindowBad(pWnd[i]) == TRUE)
-			{
-				if (i == *pBufSize - 1)
-				{
-					pWnd[i] = NULL;
-					*pBufSize -= 1;
-					continue;
-				}
-
-				for (size_t j = i + 1; j < *pBufSize; j++)
-				{
-					pWnd[i] = pWnd[j];
-				}
-
-				pWnd[*pBufSize - 1] = NULL;
-				*pBufSize -= 1;
-				continue;
-			}
+			const auto numberOfHandles = std::distance(newEnd, handles.end());
+			RtlSecureZeroMemory(&*newEnd, sizeof(decltype(handles)::element_type) * numberOfHandles);
+			*pBufSize -= static_cast<ULONG>(numberOfHandles);
 		}
 	}
 
-	return Status;
+	return status;
 }
 
 NTSTATUS(NTAPI* OriginalNtUserBuildHwndListSeven)(HANDLE hDesktop, HANDLE hwndParent, BOOLEAN bChildren, ULONG dwThreadId, ULONG lParam, PHANDLE pWnd, PULONG pBufSize);
 NTSTATUS NTAPI HookedNtUserBuildHwndListSeven(HANDLE hDesktop, HANDLE hwndParent, BOOLEAN bChildren, ULONG dwThreadId, ULONG lParam, PHANDLE pWnd, PULONG pBufSize)
 {
-	NTSTATUS Status = OriginalNtUserBuildHwndListSeven(hDesktop, hwndParent, bChildren, dwThreadId, lParam, pWnd, pBufSize);
+	auto status = OriginalNtUserBuildHwndListSeven(hDesktop, hwndParent, bChildren, dwThreadId, lParam, pWnd, pBufSize);
 
-	PEPROCESS Current = IoGetCurrentProcess();
-	if (Hider::IsHidden(Current, HIDE_NT_USER_BUILD_HWND_LIST) == TRUE &&
-		NT_SUCCESS(Status) == TRUE &&
+	if (Hider::IsHidden(IoGetCurrentProcess(), HIDE_NT_USER_BUILD_HWND_LIST) == TRUE &&
+		NT_SUCCESS(status) == TRUE &&
 		pWnd != NULL &&
 		pBufSize != NULL)
 	{
-		for (size_t i = 0; i < *pBufSize; i++)
+		std::span handles = { pWnd, *pBufSize };
+		const auto newEnd = std::remove_if(handles.begin(), handles.end(), [](auto Handle) {return Handle && IsWindowBad(Handle); });
+
+		if (newEnd != handles.end())
 		{
-			if (pWnd[i] != NULL && IsWindowBad(pWnd[i]) == TRUE)
-			{
-				if (i == *pBufSize - 1)
-				{
-					pWnd[i] = NULL;
-					*pBufSize -= 1;
-					break;
-				}
-
-				for (size_t j = i + 1; j < *pBufSize; j++)
-				{
-					pWnd[i] = pWnd[j];
-				}
-
-				pWnd[*pBufSize - 1] = NULL;
-				*pBufSize -= 1;
-				break;
-			}
+			const auto numberOfHandles = std::distance(newEnd, handles.end());
+			RtlSecureZeroMemory(&*newEnd, sizeof(decltype(handles)::element_type) * numberOfHandles);
+			*pBufSize -= static_cast<ULONG>(numberOfHandles);
 		}
 	}
 
-	return Status;
+	return status;
 }
 
 HANDLE(NTAPI* OriginalNtUserFindWindowEx)(PVOID hwndParent, PVOID hwndChild, PUNICODE_STRING ClassName, PUNICODE_STRING WindowName, ULONG Type);
@@ -1816,6 +1783,7 @@ BOOLEAN HookNtSyscalls()
 
 	std::array NtSyscallsToHook
 	{
+		SyscallInfo{0, "NtContinueEx", HookedNtContinue, (void**)&OriginalNtContinue},
 		SyscallInfo{0, "NtSetInformationThread", HookedNtSetInformationThread, (void**)&OriginalNtSetInformationThread},
 		SyscallInfo{0, "NtQueryInformationProcess", HookedNtQueryInformationProcess, (void**)&OriginalNtQueryInformationProcess},
 		SyscallInfo{0, "NtQueryObject", HookedNtQueryObject, (void**)&OriginalNtQueryObject},
@@ -1831,7 +1799,6 @@ BOOLEAN HookNtSyscalls()
 		SyscallInfo{0, "NtYieldExecution", HookedNtYieldExecution, (void**)&OriginalNtYieldExecution},
 		SyscallInfo{0, "NtQuerySystemTime", HookedNtQuerySystemTime, (void**)&OriginalNtQuerySystemTime},
 		SyscallInfo{0, "NtQueryPerformanceCounter", HookedNtQueryPerformanceCounter, (void**)&OriginalNtQueryPerformanceCounter},
-		SyscallInfo{0, "NtContinueEx", HookedNtContinue, (void**)&OriginalNtContinue},
 		SyscallInfo{0, "NtQueryInformationJobObject", HookedNtQueryInformationJobObject, (void**)&OriginalNtQueryInformationJobObject},
 		SyscallInfo{0, "NtCreateUserProcess", HookedNtCreateUserProcess, (void**)&OriginalNtCreateUserProcess},
 		SyscallInfo{0, "NtGetNextProcess", HookedNtGetNextProcess,(void**)&OriginalNtGetNextProcess},
@@ -1839,7 +1806,7 @@ BOOLEAN HookNtSyscalls()
 		SyscallInfo{0, "NtOpenThread", HookedNtOpenThread, (void**)&OriginalNtOpenThread},
 		SyscallInfo{0, "NtSetInformationProcess", HookedNtSetInformationProcess, (void**)&OriginalNtSetInformationProcess}
 	};
-	if (g_HyperHide.CurrentWindowsBuildNumber < WINDOWS_10_VERSION_20H1) NtSyscallsToHook[15].SyscallName = "NtContinue";
+	if (g_HyperHide.CurrentWindowsBuildNumber < WINDOWS_10_VERSION_20H1) NtSyscallsToHook[0].SyscallName = "NtContinue";
 
 	if (!GetNtSyscallNumbers(NtSyscallsToHook))
 	{
