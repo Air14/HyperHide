@@ -866,6 +866,8 @@ NTSTATUS NTAPI HookedNtSetContextThread(HANDLE ThreadHandle, PCONTEXT Context)
 
 				__try
 				{
+					ProbeForWrite(reinterpret_cast<char*>(Context) + 48, 4, 1);
+
 					ULONG OriginalFlags = Context->ContextFlags;
 
 					Context->ContextFlags &= ~0x10;
@@ -919,6 +921,16 @@ NTSTATUS NTAPI HookedNtGetContextThread(IN HANDLE ThreadHandle, IN OUT PCONTEXT 
 			{
 				ObDereferenceObject(ThreadObject);
 				return STATUS_INVALID_HANDLE;
+			}
+
+			__try
+			{
+				ProbeForWrite(reinterpret_cast<char*>(Context) + 48, 4, 1);
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				ObDereferenceObject(ThreadObject);
+				return GetExceptionCode();
 			}
 
 			// Check if thread object belongs to any hidden process
