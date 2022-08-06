@@ -116,7 +116,7 @@ namespace SSDT
 		PVOID Win32kBaseTextSectionBase;
 		ULONG64 Win32kTextSectionSize;
 
-		if (GetSectionData("ntoskrnl.exe", ".text", KernelTextSectionSize, KernelTextSectionBase) == FALSE)
+		if (GetSectionData("ntoskrnl.exe", ".text", KernelTextSectionSize, KernelTextSectionBase) == FALSE || !KernelTextSectionSize || !KernelTextSectionBase)
 		{
 			LogError("Couldn't get ntoskrnl .text section data");
 			return FALSE;
