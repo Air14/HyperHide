@@ -1,5 +1,5 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
 
 typedef struct _HEAP_UNPACKED_ENTRY
 {

@@ -1,5 +1,6 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
+
 namespace SSDT 
 {
 	BOOLEAN FindCodeCaves();

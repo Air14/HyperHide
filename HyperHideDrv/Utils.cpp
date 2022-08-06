@@ -1,5 +1,5 @@
 #pragma warning( disable : 4201)
-#include <ntddk.h>
+#include <ntifs.h>
 #include <ntimage.h>
 #include "Ntapi.h"
 #include "Utils.h"

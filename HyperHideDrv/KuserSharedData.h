@@ -1,5 +1,5 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
 #include "Hider.h"
 
 typedef struct _MMPFN

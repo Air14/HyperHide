@@ -1,6 +1,5 @@
 #pragma warning(disable : 4267 4201)
 
-#include <ntddk.h>
 #include <ntifs.h>
 #include "Utils.h"
 #include "HookHelper.h"

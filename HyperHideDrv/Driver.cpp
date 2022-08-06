@@ -1,5 +1,4 @@
 #pragma warning( disable : 4201)
-#include <ntddk.h>
 #include <ntifs.h>
 #include "Log.h"
 #include "Utils.h"

@@ -1,5 +1,5 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
 
 #define ObjectTypesInformation 3
 #define THREAD_CREATE_FLAGS_BYPASS_PROCESS_FREEZE 0x40

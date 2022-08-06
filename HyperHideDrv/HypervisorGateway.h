@@ -1,5 +1,4 @@
 #pragma once
-#include <ntddk.h>
 namespace hv
 {
 	bool hook_function(void* target_address, void* hook_function, void* trampoline, void** origin_function);

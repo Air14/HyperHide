@@ -1,5 +1,5 @@
 #pragma warning( disable : 4201)
-#include <ntddk.h>
+#include <ntifs.h>
 #include <intrin.h>
 #include <span>
 #include "Ntstructs.h"
@@ -208,8 +208,11 @@ NTSTATUS NTAPI HookedNtQueryInformationProcess(
 						{
 							BACKUP_RETURNLENGTH();
 							PEPROCESS ExplorerProcess = GetProcessByName(L"explorer.exe");
-							if(ExplorerProcess != NULL)
-								((PPROCESS_BASIC_INFORMATION)ProcessInformation)->InheritedFromUniqueProcessId = PsGetProcessId(ExplorerProcess);
+							if (ExplorerProcess != NULL)
+							{
+								reinterpret_cast<PPROCESS_BASIC_INFORMATION>(ProcessInformation)->InheritedFromUniqueProcessId = 
+									reinterpret_cast<ULONG_PTR>(PsGetProcessId(ExplorerProcess));
+							}
 							RESTORE_RETURNLENGTH();
 							return Status;
 						}

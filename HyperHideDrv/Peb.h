@@ -1,5 +1,5 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
 #include "Heap.h"
 
 typedef enum _SYSTEM_DLL_TYPE

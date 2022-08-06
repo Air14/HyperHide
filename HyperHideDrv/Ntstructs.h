@@ -1,5 +1,5 @@
 #pragma once
-#include <ntddk.h>
+#include <ntifs.h>
 #include "Ntenums.h"
 
 typedef struct _SYSTEM_POOLTAG
