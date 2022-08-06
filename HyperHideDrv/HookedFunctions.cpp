@@ -593,8 +593,8 @@ NTSTATUS NTAPI HookedNtQueryObject(
 				POBJECT_TYPE_INFORMATION ObjectTypeInfo = (POBJECT_TYPE_INFORMATION)ObjInfoLocation;
 				if (RtlEqualUnicodeString(&ObjectTypeInfo->TypeName, &DebugObject, FALSE) == TRUE)
 				{
-					ObjectTypeInfo->TotalNumberOfObjects = 0;
-					ObjectTypeInfo->TotalNumberOfHandles = 0;
+					ObjectTypeInfo->TotalNumberOfObjects -= g_HyperHide.NumberOfActiveDebuggers;
+					ObjectTypeInfo->TotalNumberOfHandles -= g_HyperHide.NumberOfActiveDebuggers;
 				}
 				ObjInfoLocation = (UCHAR*)ObjectTypeInfo->TypeName.Buffer;
 				ObjInfoLocation += ObjectTypeInfo->TypeName.MaximumLength;
