@@ -978,9 +978,11 @@ NTSTATUS NTAPI HookedNtQueryInformationThread(HANDLE ThreadHandle, THREADINFOCLA
 	{
 		if (ThreadInformationLength != 0)
 		{
+			const auto alignment = ThreadInformationLength < 4 ? 1 : 4;
+
 			__try
 			{
-				ProbeForRead(ThreadInformation, ThreadInformationLength, 4);
+				ProbeForRead(ThreadInformation, ThreadInformationLength, alignment);
 				if(ReturnLength != 0)
 					ProbeForWrite(ReturnLength, 4, 1);
 
