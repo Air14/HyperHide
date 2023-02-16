@@ -39,19 +39,17 @@ NTSTATUS NTAPI HookedNtQueryInformationProcess(
 		 ProcessInformationClass == ProcessHandleTracing)
 		)
 	{
-		if (ProcessInformationLength != 0)
+		__try
 		{
-			__try
-			{
+			if (ProcessInformationLength != 0)
 				ProbeForRead(ProcessInformation, ProcessInformationLength, 4);
-				if (ReturnLength != 0)
-					ProbeForWrite(ReturnLength, 4, 1);
-			}
 
-			__except (EXCEPTION_EXECUTE_HANDLER)
-			{
-				return GetExceptionCode();
-			}
+			if (ReturnLength != 0)
+				ProbeForWrite(ReturnLength, 4, 1);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return GetExceptionCode();
 		}
 
 		if (ProcessInformationClass == ProcessDebugObjectHandle)
@@ -1001,21 +999,18 @@ NTSTATUS NTAPI HookedNtQueryInformationThread(HANDLE ThreadHandle, THREADINFOCLA
 		ExGetPreviousMode() == UserMode && (ThreadInformationClass == ThreadHideFromDebugger ||
 			ThreadInformationClass == ThreadBreakOnTermination || ThreadInformationClass == ThreadWow64Context))
 	{
-		if (ThreadInformationLength != 0)
+		__try
 		{
 			const auto alignment = ThreadInformationLength < 4 ? 1 : 4;
-
-			__try
-			{
+			if(ThreadInformationLength != 0)
 				ProbeForRead(ThreadInformation, ThreadInformationLength, alignment);
-				if(ReturnLength != 0)
-					ProbeForWrite(ReturnLength, 4, 1);
 
-			}
-			__except (EXCEPTION_EXECUTE_HANDLER)
-			{
-				return GetExceptionCode();
-			}
+			if(ReturnLength != 0)
+				ProbeForWrite(ReturnLength, 4, 1);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			return GetExceptionCode();
 		}
 
 		if (ThreadInformationClass == ThreadHideFromDebugger)
