@@ -18,9 +18,6 @@ typedef struct _SSDT
 _PSSDT NtTable;
 _PSSDT Win32kTable;
 
-ULONG64 Win32kCodeCaves[200] = { 0 };
-ULONG64 KernelCodeCaves[200] = { 0 };
-
 extern HYPER_HIDE_GLOBAL_DATA g_HyperHide;
 
 namespace SSDT 
@@ -85,7 +82,7 @@ namespace SSDT
 		static UCHAR KernelAlignIndex = 0;
 
 		PVOID AddressOfTargetFunction = (PVOID)((ULONG64)NtTable->ServiceTable + (NtTable->ServiceTable[SyscallIndex] >> 4));
-		return hv::hook_function(AddressOfTargetFunction, NewFunctionAddress, (PVOID)KernelCodeCaves[KernelAlignIndex++], OriginFunction);
+		return hv::hook_function(AddressOfTargetFunction, NewFunctionAddress, OriginFunction);
 	}
 
 	BOOLEAN HookWin32kSyscall(CHAR* SyscallName, SHORT SyscallIndex, PVOID NewFunctionAddress, PVOID* OriginFunction)
@@ -101,86 +98,10 @@ namespace SSDT
 		PEPROCESS CsrssProcess = GetCsrssProcess();
 		KeStackAttachProcess((PRKPROCESS)CsrssProcess, &State);
 
-		BOOLEAN Status = hv::hook_function(AddressOfTargetFunction, NewFunctionAddress, (PVOID)Win32kCodeCaves[Win32kAlignIndex++], OriginFunction);
+		BOOLEAN Status = hv::hook_function(AddressOfTargetFunction, NewFunctionAddress, OriginFunction);
 
 		KeUnstackDetachProcess(&State);
 
 		return Status;
-	}
-
-	BOOLEAN FindCodeCaves()
-	{
-		KAPC_STATE State;
-		ULONG64 KernelTextSectionSize;
-		PVOID KernelTextSectionBase;
-		PVOID Win32kBaseTextSectionBase;
-		ULONG64 Win32kTextSectionSize;
-
-		if (GetSectionData("ntoskrnl.exe", ".text", KernelTextSectionSize, KernelTextSectionBase) == FALSE || !KernelTextSectionSize || !KernelTextSectionBase)
-		{
-			LogError("Couldn't get ntoskrnl .text section data");
-			return FALSE;
-		}
-
-		PEPROCESS CsrssProcess = GetCsrssProcess();
-		KeStackAttachProcess((PRKPROCESS)CsrssProcess, &State);
-
-		if (g_HyperHide.CurrentWindowsBuildNumber > WINDOWS_8_1)
-		{
-			if (GetSectionData("win32kfull.sys", ".text", Win32kTextSectionSize, Win32kBaseTextSectionBase) == FALSE)
-			{
-				LogError("Couldn't get win32k .text section data");
-				return FALSE;
-			}
-		}
-
-		else
-		{
-			if (GetSectionData("win32k.sys", ".text", Win32kTextSectionSize, Win32kBaseTextSectionBase) == FALSE)
-			{
-				LogError("Couldn't get win32k .text section data");
-				return FALSE;
-			}
-		}
-
-		ULONG64 Win32kCodeCaveIndex = 0;
-		ULONG64 Win32kCodeCaveSize = 0;
-
-		for (ULONG64 MemoryLocation = (ULONG64)Win32kBaseTextSectionBase; MemoryLocation < Win32kTextSectionSize + (ULONG64)Win32kBaseTextSectionBase, Win32kCodeCaveIndex < 200; MemoryLocation++)
-		{
-			*(UCHAR*)MemoryLocation == 0xCC || *(UCHAR*)MemoryLocation == 0x90 ? Win32kCodeCaveSize++ : Win32kCodeCaveSize = 0;
-
-			if (Win32kCodeCaveSize == 15)
-			{
-				// Ignore if at page boundary
-				if (PAGE_ALIGN(MemoryLocation) != PAGE_ALIGN(MemoryLocation - 13))
-					continue;
-
-				Win32kCodeCaves[Win32kCodeCaveIndex] = MemoryLocation - 13;
-				Win32kCodeCaveIndex++;
-			}
-		}
-
-		KeUnstackDetachProcess(&State);
-
-		ULONG64 KernelCodeCaveIndex = 0;
-		ULONG64 KernelCodeCaveSize = 0;
-
-		for (ULONG64 MemoryLocation = (ULONG64)KernelTextSectionBase; MemoryLocation < KernelTextSectionSize + (ULONG64)KernelTextSectionBase, KernelCodeCaveIndex < 200; MemoryLocation++)
-		{
-			*(UCHAR*)MemoryLocation == 0xCC || *(UCHAR*)MemoryLocation == 0x90 ? KernelCodeCaveSize++ : KernelCodeCaveSize = 0;
-
-			if (KernelCodeCaveSize == 15)
-			{
-				// Ignore if at page boundary
-				if (PAGE_ALIGN(MemoryLocation) != PAGE_ALIGN(MemoryLocation - 13))
-					continue;
-
-				KernelCodeCaves[KernelCodeCaveIndex] = MemoryLocation - 13;
-				KernelCodeCaveIndex++;
-			}
-		}
-
-		return TRUE;
 	}
 }

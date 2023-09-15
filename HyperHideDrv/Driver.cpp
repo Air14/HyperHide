@@ -93,11 +93,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT Driver, PCUNICODE_STRING Reg)
 
 	LogInfo("Got offsets");
 
-	if (SSDT::FindCodeCaves() == FALSE) 
-		return STATUS_UNSUCCESSFUL;
-
-	LogInfo("Got code caves");
-
 	if (SSDT::GetSsdt() == FALSE)
 		return STATUS_UNSUCCESSFUL;
 
