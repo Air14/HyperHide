@@ -49,7 +49,7 @@
 HyperHide is open-source hypervisor based Anti-Anti-Debug plugin for x64dbg/x32dbg.  HyperHide uses Intel ept to hook various syscalls and also other functions which can be used to spot the presence of debugger.
 
 # Compilation #
-In order to compile project you need  [WDK](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk "WDK") and Visual Studio 2019
+In order to compile project you need [WDK](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk "WDK") and Visual Studio 2019
 
 # Support #
 HyperHide supports all Windows versions from Windows 7 up to the newest version (x64 only), and works only on intel processors with VT-x and EPT support.
@@ -63,10 +63,10 @@ Turn on test signing mode by running below command in cmd with administrator rig
 
 Put **HyperHideDrv.sys** and **airhv.sys** to **C:\Windows\System32\drivers** then
 open **Scripts** folder in repository and execute **create.bat** with administrator rights.
-In order to turn on both drivers execute **on.bat** with administrator rights. 
+In order to turn on both drivers execute **on.bat** with administrator rights.
 If you want to turn off both airhv and HyperHideDrv execute **off.bat** with administrator rights (remember to turn off all x64dbg/x32dbg instances before turning off drivers).
 
-32-bit: Copy **HyperHide.ini** and **HyperHide.dp32** to your \x32\plugins\ directory. 
+32-bit: Copy **HyperHide.ini** and **HyperHide.dp32** to your \x32\plugins\ directory.
 
 64-bit: Copy **HyperHide.ini** and **HyperHide.dp64** to your \x64\plugins\ directory.
 
@@ -140,7 +140,7 @@ make the debugging harder.
 When **Clear ProcessBreakOnTermination** checkbox is set in plugin options, then everytime you start debugging HyperHideDrv will clear this field in debugged process 
 EPROCESS struct and save information if it was set or not for further use in NtQueryInformationProcess **(Do Not use if you are starting process with debugger).**
  
- - Second flag is ProcessHandleTracing. It indicates if process handle tracing is enable or not.
+ - Second flag is ProcessHandleTracing. It indicates if process handle tracing is enabled or not.
 
 When **Save ProcessHandleTracing** checkbox is set in plugin options, then everytime you start debugging HyperHideDrv will save information if it was set or not for further use in NtQueryInformationProcess **(Do Not use if you are starting process with debugger).**
 
@@ -172,7 +172,7 @@ thread KTHREAD struct **(Do Not use if you are starting process with debugger)**
 
 KUserShared data is global shared page between all usermode processes
 located always in same exact address (0x7FFE0000). KUserShared has a lot of counters
-which can be used to perform time attacks. 
+which can be used to perform time attacks.
 
 When **KUserSharedData** checkbox is set in plugin options then everytime you start debugging HyperHideDrv will swap pfn of process kusd with fake one.
 Everytime when process is paused HyperHideDrv will stop updating counters.
@@ -183,7 +183,7 @@ When **Clear KUserSharedData** checkbox is set in plugin options then HyperHideD
 ## 6. KiExceptionDisptach ##
 
 KiExceptionDisptach is kernelmode function responsible for handling exceptions.
-HyperHideDrv hook it to clear debug registers or to send fake debug context if it was previously set with NtSetContextThread\NtSetInformationThread\NtContinue. 
+HyperHideDrv hook it to clear debug registers or to send fake debug context if it was previously set with NtSetContextThread\NtSetInformationThread\NtContinue.
 
 When **KiExceptionDisptach** checkbox is set in plugin options then everytime you start debugging HyperHideDrv will hook this function 
 
@@ -191,20 +191,20 @@ When **KiExceptionDisptach** checkbox is set in plugin options then everytime yo
 
 NtQueryInformationProcess can be called with various PROCESSINFOCLASS values to detect debugger, for example:
 
-  * **ProcessDebugPort** is used to retrive port number of the debugger for the process. If process is debuged this function writes -1 (0xFFFFFFFFFFFFFFFF) to buffer passed in ProcessInformation. Otherwise it writes 0 (HyperHideDrv always return 0).
+  * **ProcessDebugPort** is used to retrieve port number of the debugger for the process. If process is debugged this function writes -1 (0xFFFFFFFFFFFFFFFF) to buffer passed in ProcessInformation. Otherwise it writes 0 (HyperHideDrv always return 0).
   
   * **ProcessDebugObjectHandle** is used to query debug object handle if there is no attached debugger function write 0 to passed buffer and return status STATUS_PORT_NOT_SET (0xC0000353). HyperHideDrv will always return STATUS_PORT_NOT_SET
   
   * **ProcessDebugFlags** is used to query process flag NoDebugInherit. If debugger is attached function returns 0 otherway it returns 1. HyperHideDrv will return value previosly saved from NtSetInformationProcess or value which was saved while attaching.
   
-  * **ProcessBreakOnTermination** is used to retrive information if process has BreakOnTermination flag set or not. HyperHideDrv will return value previously saved from NtSetInformationProcess or value which was cleared while attaching.
+  * **ProcessBreakOnTermination** is used to retrieve information if process has BreakOnTermination flag set or not. HyperHideDrv will return value previously saved from NtSetInformationProcess or value which was cleared while attaching.
   
-  *  **ProcessBasicInformation** is used to retrive information of process parent id.
+  *  **ProcessBasicInformation** is used to retrieve information of process parent id.
   HyperHide will return explorer.exe pid.
   
-  * **ProcessIoCounters** is used to retrive informaton about io counters. HyperHideDrv will write 1 to OtherOperationCount field in IO_COUNTERS.
+  * **ProcessIoCounters** is used to retrieve informaton about io counters. HyperHideDrv will write 1 to OtherOperationCount field in IO_COUNTERS.
   
-  * **ProcessHandleTracing** is used to retrive information if process handle tracing is enabled. HyperHideDrv will return value previously saved from NtSetInformationProcess or value which was saved while attaching.
+  * **ProcessHandleTracing** is used to retrieve information if process handle tracing is enabled. HyperHideDrv will return value previously saved from NtSetInformationProcess or value which was saved while attaching.
 
 When **NtQueryInformationProcess** checkbox is set in plugin options then everytime you start debugging HyperHideDrv will hook this function and handles above cases.
 
