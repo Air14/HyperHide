@@ -14,10 +14,8 @@ enum _LDR_DLL_LOAD_REASON
     LoadReasonUnknown = -1
 };
 
-typedef enum _PSCREATETHREADNOTIFYTYPE {
-    PsCreateThreadNotifyNonSystem = 0,
-    PsCreateThreadNotifySubsystems = 1
-} PSCREATETHREADNOTIFYTYPE;
+// _PSCREATETHREADNOTIFYTYPE is already defined in Windows 10 SDK
+// Removed duplicate definition to avoid C2011 error
 
 enum SYSDBG_COMMAND
 {

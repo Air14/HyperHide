@@ -181,7 +181,7 @@ BOOLEAN GetProcessInfo(CONST CHAR* Name, ULONG64& ImageSize, PVOID& ImageBase)
 {
 	ULONG Bytes;
 	NTSTATUS Status = ZwQuerySystemInformation(SystemModuleInformation, 0, 0, &Bytes);
-	PSYSTEM_MODULE_INFORMATION Mods = (PSYSTEM_MODULE_INFORMATION)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+	PSYSTEM_MODULE_INFORMATION Mods = (PSYSTEM_MODULE_INFORMATION)ExAllocatePool2(POOL_FLAG_NON_PAGED, Bytes, DRIVER_TAG);
 	if (Mods == NULL)
 		return FALSE;
 
@@ -224,7 +224,7 @@ PEPROCESS GetProcessByName(CONST WCHAR* ProcessName)
 	ULONG Bytes;
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
-	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePool2(POOL_FLAG_NON_PAGED, Bytes, DRIVER_TAG);
 	if (ProcInfo == NULL)
 		return NULL;
 
@@ -383,7 +383,7 @@ BOOLEAN ClearBypassProcessFreezeFlag(PEPROCESS TargetProcess)
 	}
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
-	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePool2(POOL_FLAG_NON_PAGED, Bytes, DRIVER_TAG);
 
 	if (ProcInfo == NULL)
 		return FALSE; 
@@ -425,11 +425,11 @@ BOOLEAN ClearThreadHideFromDebuggerFlag(PEPROCESS TargetProcess)
 	ULONG Bytes;
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
-	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePool2(POOL_FLAG_NON_PAGED, Bytes, DRIVER_TAG);
 
 	if (ProcInfo == NULL)
 		return FALSE;
-	
+
 	RtlSecureZeroMemory(ProcInfo, Bytes);
 
 	Status = ZwQuerySystemInformation(SystemProcessInformation, ProcInfo, Bytes, &Bytes);
@@ -529,7 +529,7 @@ BOOLEAN ClearThreadBreakOnTerminationFlags(PEPROCESS TargetProcess)
 	ULONG Bytes;
 
 	ZwQuerySystemInformation(SystemProcessInformation, NULL, NULL, &Bytes);
-	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePoolWithTag(NonPagedPool, Bytes, DRIVER_TAG);
+	PSYSTEM_PROCESS_INFO ProcInfo = (PSYSTEM_PROCESS_INFO)ExAllocatePool2(POOL_FLAG_NON_PAGED, Bytes, DRIVER_TAG);
 	if (ProcInfo == NULL)
 		return FALSE;
 

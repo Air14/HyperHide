@@ -133,13 +133,13 @@ namespace Hider
 					HiddenThread = (PHIDDEN_THREAD)CONTAINING_RECORD(CurrentThread, HIDDEN_THREAD, HiddenThreadList);
 					CurrentThread = CurrentThread->Flink;
 	
-					if (HiddenThread->ThreadObject == ThreadObject)
-						goto End;
-				}
+						if (HiddenThread->ThreadObject == ThreadObject)
+							goto End;
+					}
 
-				HiddenThread = (PHIDDEN_THREAD)ExAllocatePoolWithTag(NonPagedPool, sizeof(HIDDEN_THREAD), DRIVER_TAG);
-				if (HiddenThread == NULL)
-					return NULL;
+					HiddenThread = (PHIDDEN_THREAD)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(HIDDEN_THREAD), DRIVER_TAG);
+					if (HiddenThread == NULL)
+						return NULL;
 
 				RtlSecureZeroMemory(HiddenThread, sizeof(HIDDEN_THREAD));
 				HiddenThread->ThreadObject = ThreadObject;
@@ -325,7 +325,7 @@ namespace Hider
 
 	BOOLEAN CreateEntry(PEPROCESS DebuggerProcess, PEPROCESS DebuggedProcess)
 	{
-		PHIDDEN_PROCESS HiddenProcess = (PHIDDEN_PROCESS)ExAllocatePoolWithTag(NonPagedPool, sizeof(HIDDEN_PROCESS), DRIVER_TAG);
+		PHIDDEN_PROCESS HiddenProcess = (PHIDDEN_PROCESS)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(HIDDEN_PROCESS), DRIVER_TAG);
 		if (HiddenProcess == NULL)
 		{
 			LogError("Allocation failed");
